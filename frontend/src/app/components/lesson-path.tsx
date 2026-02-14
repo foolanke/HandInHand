@@ -246,6 +246,11 @@ export function LessonPath() {
         dailyGoal={dailyGoal}
         completedLessons={completedLessons.size}
         totalLessons={lessons.length}
+        dictionary={
+          Array.from(completedLessons)
+            .map(index => lessonContent[lessons[index]?.id])
+            .filter(Boolean)
+        }
       />
 
       {/* Main Content Area */}
