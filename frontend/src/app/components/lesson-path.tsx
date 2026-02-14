@@ -222,7 +222,7 @@ export function LessonPath() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 ml-80 flex flex-col h-screen">
+      <div className="flex-1 ml-80 flex flex-col h-screen relative">
         <Confetti show={showConfetti} onComplete={() => setShowConfetti(false)} />
         
         {currentLesson && (
@@ -234,64 +234,19 @@ export function LessonPath() {
           />
         )}
 
-        {/* Top Header */}
+        {/* Floating Logo */}
         <motion.div
-          className="bg-slate-900/80 backdrop-blur-xl shadow-2xl z-30 px-8 py-4 border-b border-slate-800 flex items-center justify-between"
-          initial={{ y: -100 }}
-          animate={{ y: 0 }}
+          className="absolute top-6 left-8 z-30 flex items-center gap-3 bg-slate-900/60 backdrop-blur-xl px-5 py-3 rounded-2xl shadow-2xl border border-slate-700/50"
+          initial={{ y: -100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
           transition={{ type: "spring", stiffness: 100 }}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              LearnQuest
-            </h1>
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+            <Sparkles className="w-6 h-6 text-white" />
           </div>
-
-          <div className="flex items-center gap-6">
-            {/* Progress Stats */}
-            <motion.div
-              className="flex items-center gap-3 bg-gradient-to-br from-orange-500/20 to-red-500/20 px-4 py-2.5 rounded-xl border border-orange-500/30"
-              whileHover={{ scale: 1.05 }}
-            >
-              <Flame className="w-5 h-5 text-orange-400" />
-              <div>
-                <div className="text-xs text-orange-300/80 font-medium">Streak</div>
-                <div className="font-bold text-orange-400">{streak} days</div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="flex items-center gap-3 bg-gradient-to-br from-yellow-500/20 to-orange-500/20 px-4 py-2.5 rounded-xl border border-yellow-500/30"
-              whileHover={{ scale: 1.05 }}
-            >
-              <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-              <div>
-                <div className="text-xs text-yellow-300/80 font-medium">Level {level}</div>
-                <div className="text-[10px] text-yellow-400/70">{xpForNextLevel} XP to next</div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="flex items-center gap-3 bg-gradient-to-br from-blue-500/20 to-purple-500/20 px-4 py-2.5 rounded-xl border border-blue-500/30 min-w-[180px]"
-              whileHover={{ scale: 1.05 }}
-            >
-              <TrendingUp className="w-5 h-5 text-blue-400" />
-              <div className="flex-1">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs text-blue-300/80 font-medium">Total XP</span>
-                  <span className="text-xs font-bold text-blue-400">{totalXP}</span>
-                </div>
-                <Progress value={levelProgress} className="h-1.5 bg-slate-800" />
-              </div>
-            </motion.div>
-
-            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-200 hover:bg-slate-800">
-              <Settings className="w-5 h-5" />
-            </Button>
-          </div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            LearnQuest
+          </h1>
         </motion.div>
 
         {/* Scrollable Path Area */}
