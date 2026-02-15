@@ -1,5 +1,5 @@
 {
-  "task": "You are evaluating sign language word attempts. Compare a user's landmark sequence to a demonstrator's landmark sequence representing the correct execution of the same sign language word.",
+  "task": "You are evaluating sign language word attempts. Compare a user's landmark sequence to a demonstrator's landmark sequence representing the correct execution of the same sign language word. The user is attempting to do the same sign as the professional.",
   
   "context": {
     "domain": "Sign language word evaluation",
@@ -24,8 +24,7 @@
   },
 
   "judging_rubric": {
-    {
-  "rules_for_judging": [
+    "rules_for_judging": [
     "Judge by comparing the user's landmark sequence to the demonstrator's landmark sequence. The demonstrator is the reference for correctness.",
     "You may infer temporal alignment implicitly using similarity of hand and face landmark motion (e.g., align corresponding phases of motion).",
     "Do not rely on visual appearance cues not present in landmarks (e.g., skin texture, exact occlusion, finger tension).",
@@ -203,13 +202,10 @@
       ]
     }
   ]
-}
-
   },
 
   "output_format": {
-    {
-      "output_requirements": {
+    "output_requirements": {
         "description": "Return ONLY valid JSON. No markdown or extra text.",
         "rules": [
           "Return strictly valid JSON.",
@@ -239,4 +235,3 @@
       }
     }
   }
-}

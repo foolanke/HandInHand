@@ -1,0 +1,22 @@
+{
+  "timestamp": "20260214_213237",
+  "model": "gemini-2.5-flash",
+  "input": {
+    "example_file": "greeting.json",
+    "attempt_file": "greeting_attempt.json"
+  },
+  "result": {
+    "overall_score_0_to_4": 0,
+    "summary": "The user attempted to sign 'daddy', while the demonstrator provided a reference for 'greeting'. Due to this fundamental mismatch in the intended signs, a direct comparison of execution is not possible. The user's landmark sequence does not align with the demonstrator's sequence for the expected sign.",
+    "pros": {
+      "points": []
+    },
+    "cons": {
+      "points": [
+        "The user signed a different word.",
+        "Hand movements did not correspond.",
+        "Hand shapes and locations greatly differed."
+      ]
+    }
+  }
+}

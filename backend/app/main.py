@@ -14,7 +14,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+<<<<<<< HEAD
+=======
 
+>>>>>>> 74c83b0581baf76ce0220e43cf5a3320caacd4aa
 class RatingResponse(BaseModel):
     rating: float
     message: str

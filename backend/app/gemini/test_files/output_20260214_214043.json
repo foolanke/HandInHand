@@ -1,0 +1,26 @@
+{
+  "timestamp": "20260214_214043",
+  "model": "gemini-2.5-flash",
+  "input": {
+    "example_file": "greeting.json",
+    "attempt_file": "greeting_attempt.json"
+  },
+  "result": {
+    "overall_score_0_to_4": 2,
+    "summary": "The user's attempt reproduced the upward motion and general open hand shape correctly. However, the overall amplitude and duration of the movement were significantly exaggerated. The hand's location relative to the face also did not match the demonstrator.",
+    "pros": {
+      "points": [
+        "Movement direction matched the demonstrator.",
+        "The hand maintained a correct open shape.",
+        "Motion flow appeared generally smooth."
+      ]
+    },
+    "cons": {
+      "points": [
+        "Motion amplitude was greatly exaggerated.",
+        "Hand location relative to face was incorrect.",
+        "The main stroke duration was too long."
+      ]
+    }
+  }
+}
