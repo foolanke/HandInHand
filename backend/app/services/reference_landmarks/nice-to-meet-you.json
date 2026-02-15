@@ -1,5 +1,5 @@
 {
-  "word": "greeting",
+  "word": "nice-to-meet-you",
   "total_frames": 83,
   "frames_with_hands": 82,
   "frames_with_face": 9,
@@ -15,7 +15,7 @@
     "right_ear",
     "mouth_center"
   ],
-  "video_file": "/Users/paulfomitchev/Documents/Coding/ctrl-hack-del/Douling-for-ASL/backend/app/services/reference_videos/greeting.mp4",
+  "video_file": "/Users/paulfomitchev/Documents/Coding/ctrl-hack-del/Douling-for-ASL/backend/app/services/reference_videos/nice-to-meet-you.mp4",
   "frames": [
     {
       "frame_number": 0,

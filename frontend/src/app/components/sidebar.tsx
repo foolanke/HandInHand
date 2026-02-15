@@ -91,6 +91,12 @@ export function Sidebar({ streak, level, totalXP, levelProgress, xpForNextLevel,
       {/* Decorative vine along top */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-blue-500/40 to-transparent" />
 
+      {/* Brand */}
+      <div className="px-6 pt-5 pb-4 border-b border-slate-800 flex items-center gap-3">
+        <img src="/logo.png" alt="HandInHand" className="w-10 h-10 rounded-lg" />
+        <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">HandInHand</h1>
+      </div>
+
       {/* Profile */}
       <div className="p-6 border-b border-slate-800">
         <div className="flex flex-col items-center gap-3">
@@ -132,64 +138,58 @@ export function Sidebar({ streak, level, totalXP, levelProgress, xpForNextLevel,
       </nav>
 
       {/* Stats Cards - fill remaining space evenly */}
-      <div className="flex-1 p-5 flex flex-col justify-between gap-4">
+      <div className="p-4 flex-1 min-h-0 flex flex-col gap-2.5">
         {/* Level & XP */}
         <motion.div
-          className="flex-1 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 rounded-xl p-5 border border-yellow-500/20 cursor-pointer flex flex-col justify-center"
+          className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 rounded-xl p-3 border border-yellow-500/20 cursor-pointer flex flex-col justify-center flex-1"
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           onClick={() => setExpandedCard('level')}
         >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <Star className="w-6 h-6 text-yellow-400 fill-none stroke-yellow-400 stroke-2" />
-              <span className="text-base font-semibold text-slate-100">Level {level}</span>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
+              <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+              <span className="text-sm font-semibold text-slate-100">Level {level}</span>
             </div>
-            <span className="text-sm text-slate-400">{totalXP} XP</span>
+            <span className="text-xs text-slate-400">{totalXP} XP</span>
           </div>
-          <Progress value={levelProgress} className="h-2.5 bg-slate-800" />
-          <p className="text-sm text-slate-400 mt-2">{xpForNextLevel} XP to next level</p>
+          <Progress value={levelProgress} className="h-2 bg-slate-800" />
+          <p className="text-xs text-slate-400 mt-1">{xpForNextLevel} XP to next level</p>
         </motion.div>
 
         {/* Streak */}
         <motion.div
-          className={`flex-1 rounded-xl p-5 border cursor-pointer flex flex-col justify-center ${
-            streak >= 3
-              ? 'bg-gradient-to-br from-red-500/10 to-orange-500/10 border-red-500/20'
-              : 'bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-slate-700'
-          }`}
+          className="bg-gradient-to-br from-orange-500/10 to-red-500/10 rounded-xl p-3 border border-orange-500/20 cursor-pointer flex flex-col justify-center flex-1"
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           onClick={() => setExpandedCard('streak')}
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <Flame className={`w-6 h-6 ${streak >= 3 ? 'text-red-500' : 'text-slate-600'}`} />
-              <span className={`text-base font-semibold ${streak >= 3 ? 'text-slate-100' : 'text-slate-500'}`}>{streak} Day Streak</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Flame className="w-5 h-5 text-orange-400" />
+              <span className="text-sm font-semibold text-slate-100">{streak} Day Streak</span>
             </div>
-            <span className={`text-sm font-bold ${streak >= 3 ? 'text-red-400' : 'text-slate-600'}`}>~</span>
+            <span className="text-xs text-orange-400 font-bold">~</span>
           </div>
-          <p className={`text-sm mt-1 ${streak >= 3 ? 'text-slate-400' : 'text-slate-600'}`}>
-            {streak >= 3 ? 'Keep it up!' : 'Build your streak!'}
-          </p>
+          <p className="text-xs text-slate-400 mt-1">Keep it up!</p>
         </motion.div>
 
         {/* Daily Goal */}
         <motion.div
-          className="flex-1 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 rounded-xl p-5 border border-slate-800 cursor-pointer flex flex-col justify-center"
+          className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 rounded-xl p-3 border border-slate-800 cursor-pointer flex flex-col justify-center flex-1"
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           onClick={() => setExpandedCard('goal')}
         >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <Target className="w-6 h-6 text-blue-400" />
-              <span className="text-base font-semibold text-slate-100">Daily Goal</span>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-blue-400" />
+              <span className="text-sm font-semibold text-slate-100">Daily Goal</span>
             </div>
-            <span className="text-sm font-bold text-blue-400">{dailyGoal} / {dailyGoalTarget} XP</span>
+            <span className="text-xs font-bold text-blue-400">{dailyGoal} / {dailyGoalTarget} XP</span>
           </div>
-          <Progress value={dailyGoalProgress} className="h-2.5 mb-2" />
-          <p className="text-sm text-slate-400">
+          <Progress value={dailyGoalProgress} className="h-2 mb-1" />
+          <p className="text-xs text-slate-400">
             {dailyGoal >= dailyGoalTarget ? "Daily goal reached!" : `${dailyGoalTarget - dailyGoal} XP remaining`}
           </p>
         </motion.div>
