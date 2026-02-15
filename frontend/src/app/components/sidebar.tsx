@@ -114,7 +114,7 @@ export function Sidebar({ streak, level, totalXP, levelProgress, xpForNextLevel,
       <nav className="p-4 space-y-2 border-b border-slate-800">
         <Button
           variant="default"
-          className="w-full justify-start gap-4 h-14 text-base bg-gradient-to-r from-blue-600 to-purple-600 text-slate-100 shadow-lg border border-blue-500/20"
+          className="w-full justify-start gap-4 h-14 text-base bg-gradient-to-r from-purple-700 via-purple-600 to-purple-500 text-white shadow-lg border border-purple-400/30 hover:from-purple-600 hover:via-purple-500 hover:to-purple-400 transition-all"
         >
           <Home className="w-6 h-6" />
           <span className="font-medium">Learn</span>
@@ -521,7 +521,7 @@ export function Sidebar({ streak, level, totalXP, levelProgress, xpForNextLevel,
 
           {expandedCard === 'level' && (
             <div className="text-center">
-              <Star className="w-16 h-16 text-yellow-400 fill-yellow-400 mx-auto mb-4" />
+              <Star className="w-16 h-16 text-yellow-400 fill-none stroke-yellow-400 stroke-2 mx-auto mb-4" />
               <h2 className="text-3xl font-bold text-slate-100 mb-2">Level {level}</h2>
               <p className="text-lg text-slate-400 mb-6">{totalXP} Total XP</p>
               <Progress value={levelProgress} className="h-4 bg-slate-800 mb-3" />

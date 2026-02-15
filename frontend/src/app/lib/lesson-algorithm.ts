@@ -308,6 +308,84 @@ export function overrideUnitTestAfterMiss(
   return updated;
 }
 
+// ─── Phased Lesson Plan ──────────────────────────────────────────────────────
+
+export interface PhasedLessonPlan {
+  motionSlots: LessonSlot[];
+  mcqSlots: LessonSlot[];
+}
+
+/**
+ * Generate a phased lesson plan: all motion slots (SS1/SS3) first, then MCQ (SS2).
+ * Motion: SS1(weak), SS1(other), SS3(weak) — 3 slots
+ * MCQ:    SS2(weak), SS2(other), SS2(other) — 3 slots
+ */
+export function generatePhasedSlots(
+  words: LessonWord[],
+  masteryMap: MasteryMap,
+): PhasedLessonPlan {
+  const [weak, other] = sortByWeakest(words, masteryMap);
+
+  return {
+    motionSlots: [
+      makeSlot('ss1', weak),
+      makeSlot('ss1', other),
+      makeSlot('ss3', weak),
+    ],
+    mcqSlots: [
+      makeSlot('ss2', weak),
+      makeSlot('ss2', other),
+      makeSlot('ss2', other),
+    ],
+  };
+}
+
+/**
+ * Generate a phased unit test plan: group motion and MCQ slots separately.
+ * Uses the same word-ranking logic as generateUnitTestSlots.
+ */
+export function generatePhasedUnitTestSlots(
+  unitWords: LessonWord[],
+  masteryMap: MasteryMap,
+): PhasedLessonPlan {
+  const ranked = sortByWeakest(unitWords, masteryMap);
+
+  // Motion slots: 2×SS1 + 4×SS3 = 6 motion slots
+  const motionTypes: SlotType[] = ['ss1', 'ss3', 'ss3', 'ss1', 'ss3', 'ss3'];
+  // MCQ slots: 6×SS2
+  const mcqCount = 6;
+  const TOTAL = motionTypes.length + mcqCount;
+
+  const maxPerWord = Math.max(2, Math.ceil(TOTAL / ranked.length));
+
+  // Build pool weakest-first
+  const pool: LessonWord[] = [];
+  const appearances: Record<string, number> = {};
+  while (pool.length < TOTAL) {
+    let added = false;
+    for (const w of ranked) {
+      if (pool.length >= TOTAL) break;
+      if ((appearances[w.word] ?? 0) < maxPerWord) {
+        pool.push(w);
+        appearances[w.word] = (appearances[w.word] ?? 0) + 1;
+        added = true;
+      }
+    }
+    if (!added) break;
+  }
+
+  // Split pool: first half for motion, second for MCQ
+  const motionPool = pool.slice(0, motionTypes.length);
+  const mcqPool = pool.slice(motionTypes.length);
+
+  const motionSlots: LessonSlot[] = motionTypes.map((type, i) =>
+    makeSlot(type, motionPool[i])
+  );
+  const mcqSlots: LessonSlot[] = mcqPool.map(w => makeSlot('ss2', w));
+
+  return { motionSlots, mcqSlots };
+}
+
 /**
  * Update masteryMap for a completed slot.
  * SS1: marks introduced, updates lastSeenSlot only.
