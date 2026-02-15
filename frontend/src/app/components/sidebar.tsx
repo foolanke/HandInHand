@@ -1,17 +1,11 @@
 import { motion } from "motion/react";
 import { useState } from "react";
-import { Home, Settings, Target, Flame, Star, User, BookOpen, ChevronLeft, ChevronRight, X, Check } from "lucide-react";
+import { Home, Settings, Target, Flame, Star, User, BookOpen, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
-
-const AVATAR_GRADIENTS = [
-  { from: "from-blue-500", to: "to-purple-600", label: "Blue-Purple" },
-  { from: "from-green-500", to: "to-teal-600", label: "Green-Teal" },
-  { from: "from-pink-500", to: "to-rose-600", label: "Pink-Rose" },
-  { from: "from-orange-500", to: "to-red-600", label: "Orange-Red" },
-  { from: "from-cyan-500", to: "to-blue-600", label: "Cyan-Blue" },
-  { from: "from-violet-500", to: "to-indigo-600", label: "Violet-Indigo" },
-];
+import { AvatarPreview, DEFAULT_AVATAR } from "./avatar-preview";
+import { AvatarBuilder } from "./avatar-builder";
+import type { AvatarConfig } from "./avatar-preview";
 
 interface SidebarProps {
   streak: number;
@@ -25,12 +19,19 @@ interface SidebarProps {
   dictionary: { word: string; videoPath: string }[];
 }
 
-function loadProfile() {
+function loadProfile(): { name: string; avatar: AvatarConfig } {
   try {
     const raw = localStorage.getItem("asl_profile");
-    if (raw) return JSON.parse(raw) as { name: string; avatarIndex: number };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Migration: old format had avatarIndex, new has avatar object
+      if (parsed.avatar && typeof parsed.avatar === "object") {
+        return { name: parsed.name || "Learner", avatar: { ...DEFAULT_AVATAR, ...parsed.avatar } };
+      }
+      return { name: parsed.name || "Learner", avatar: DEFAULT_AVATAR };
+    }
   } catch { /* ignore */ }
-  return { name: "Learner", avatarIndex: 0 };
+  return { name: "Learner", avatar: DEFAULT_AVATAR };
 }
 
 export function Sidebar({ streak, level, totalXP, levelProgress, xpForNextLevel, dailyGoal, completedLessons, totalLessons, dictionary }: SidebarProps) {
@@ -44,19 +45,17 @@ export function Sidebar({ streak, level, totalXP, levelProgress, xpForNextLevel,
   // Profile state
   const [profile, setProfile] = useState(loadProfile);
   const [editName, setEditName] = useState(profile.name);
-  const [editAvatarIndex, setEditAvatarIndex] = useState(profile.avatarIndex);
+  const [editAvatar, setEditAvatar] = useState<AvatarConfig>(profile.avatar);
 
-  const avatarGradient = AVATAR_GRADIENTS[profile.avatarIndex] || AVATAR_GRADIENTS[0];
-
-  function saveProfile(name: string, avatarIndex: number) {
-    const newProfile = { name: name.trim() || "Learner", avatarIndex };
+  function saveProfile(name: string, avatar: AvatarConfig) {
+    const newProfile = { name: name.trim() || "Learner", avatar };
     localStorage.setItem("asl_profile", JSON.stringify(newProfile));
     setProfile(newProfile);
   }
 
   function openEditProfile() {
     setEditName(profile.name);
-    setEditAvatarIndex(profile.avatarIndex);
+    setEditAvatar(profile.avatar);
     setSettingsView('editProfile');
   }
 
@@ -74,8 +73,8 @@ export function Sidebar({ streak, level, totalXP, levelProgress, xpForNextLevel,
       {/* Profile */}
       <div className="p-6 border-b border-slate-800">
         <div className="flex flex-col items-center gap-3">
-          <div className={`w-20 h-20 bg-gradient-to-br ${avatarGradient.from} ${avatarGradient.to} rounded-full flex items-center justify-center shadow-lg border-3 border-slate-700`}>
-            <User className="w-10 h-10 text-slate-100" />
+          <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center shadow-lg border-3 border-slate-700 overflow-hidden">
+            <AvatarPreview config={profile.avatar} size={72} />
           </div>
           <div className="text-center">
             <h3 className="text-lg font-bold text-slate-100">{profile.name}</h3>
@@ -289,34 +288,8 @@ export function Sidebar({ streak, level, totalXP, levelProgress, xpForNextLevel,
                 </button>
               </div>
 
-              {/* Avatar Preview */}
-              <div className="flex flex-col items-center mb-8">
-                <div className={`w-24 h-24 bg-gradient-to-br ${(AVATAR_GRADIENTS[editAvatarIndex] || AVATAR_GRADIENTS[0]).from} ${(AVATAR_GRADIENTS[editAvatarIndex] || AVATAR_GRADIENTS[0]).to} rounded-full flex items-center justify-center shadow-lg border-3 border-slate-700 mb-3`}>
-                  <User className="w-12 h-12 text-slate-100" />
-                </div>
-                <p className="text-sm text-slate-400">Choose your avatar color</p>
-              </div>
-
-              {/* Avatar Color Picker */}
-              <div className="mb-6">
-                <label className="text-sm font-medium text-slate-300 mb-3 block">Avatar Color</label>
-                <div className="flex gap-3 flex-wrap">
-                  {AVATAR_GRADIENTS.map((g, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setEditAvatarIndex(i)}
-                      className={`w-10 h-10 rounded-full bg-gradient-to-br ${g.from} ${g.to} transition-all ${
-                        editAvatarIndex === i
-                          ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-110'
-                          : 'hover:scale-105 opacity-70 hover:opacity-100'
-                      }`}
-                      title={g.label}
-                    >
-                      {editAvatarIndex === i && <Check className="w-5 h-5 text-white mx-auto" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {/* Avatar Builder */}
+              <AvatarBuilder value={editAvatar} onChange={setEditAvatar} />
 
               {/* Display Name */}
               <div className="mb-8">
@@ -342,7 +315,7 @@ export function Sidebar({ streak, level, totalXP, levelProgress, xpForNextLevel,
                 </button>
                 <button
                   onClick={() => {
-                    saveProfile(editName, editAvatarIndex);
+                    saveProfile(editName, editAvatar);
                     setSettingsView('main');
                   }}
                   className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-medium hover:from-blue-500 hover:to-purple-500 transition shadow-lg"

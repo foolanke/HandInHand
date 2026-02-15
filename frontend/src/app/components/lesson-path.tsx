@@ -286,6 +286,48 @@ export function LessonPath() {
 
   const { level, xpForNextLevel, levelProgress } = getLevelInfo(totalXP);
 
+  // Refs for measuring star positions for connecting paths
+  const nodeRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [pathLines, setPathLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
+
+  useEffect(() => {
+    // Delay measurement so the browser has time to lay out nodes
+    const timer = setTimeout(() => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      // Get each node's center relative to the container using offset-based traversal
+      function getOffsetRelativeTo(el: HTMLElement, ancestor: HTMLElement) {
+        let x = 0, y = 0;
+        let current: HTMLElement | null = el;
+        while (current && current !== ancestor) {
+          x += current.offsetLeft;
+          y += current.offsetTop;
+          current = current.offsetParent as HTMLElement | null;
+        }
+        return { x, y };
+      }
+
+      const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+      for (let i = 0; i < lessons.length - 1; i++) {
+        const a = nodeRefs.current[i];
+        const b = nodeRefs.current[i + 1];
+        if (!a || !b) continue;
+        const aPos = getOffsetRelativeTo(a, container);
+        const bPos = getOffsetRelativeTo(b, container);
+        lines.push({
+          x1: aPos.x + a.offsetWidth / 2,
+          y1: aPos.y + a.offsetHeight / 2,
+          x2: bPos.x + b.offsetWidth / 2,
+          y2: bPos.y + b.offsetHeight / 2,
+        });
+      }
+      setPathLines(lines);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [completedLessons, activeView]);
+
   const completeLesson = useCallback((lessonIndex: number) => {
     const lesson = lessons[lessonIndex];
 
@@ -639,93 +681,55 @@ export function LessonPath() {
         <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
           <PathDecorations totalLessons={lessons.length} />
 
-          <div className="relative max-w-2xl mx-auto py-16 px-8">
-            {/* Forest Trail Path */}
-            <div className="absolute left-1/2 top-0 bottom-0 -translate-x-1/2 w-[280px]" style={{ zIndex: 1 }}>
-              <svg className="w-full h-full" viewBox="0 0 280 2200" preserveAspectRatio="xMidYMin meet">
+          <div className="relative max-w-2xl mx-auto py-16 px-8" ref={containerRef}>
+            {/* Connecting paths between stars */}
+            {pathLines.length > 0 && (
+              <svg
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                style={{ zIndex: 1 }}
+              >
                 <defs>
-                  <linearGradient id="trailGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#6d28d9" stopOpacity="0.4" />
-                    <stop offset="30%" stopColor="#7c3aed" stopOpacity="0.35" />
-                    <stop offset="60%" stopColor="#6d28d9" stopOpacity="0.3" />
-                    <stop offset="100%" stopColor="#4c1d95" stopOpacity="0.35" />
+                  <linearGradient id="pathLit" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#a78bfa" />
+                    <stop offset="100%" stopColor="#7c3aed" />
                   </linearGradient>
-
-                  <filter id="softGlow">
-                    <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                  <linearGradient id="pathDim" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#334155" />
+                    <stop offset="100%" stopColor="#1e293b" />
+                  </linearGradient>
+                  <filter id="pathGlow">
+                    <feGaussianBlur stdDeviation="3" result="blur" />
                     <feMerge>
-                      <feMergeNode in="coloredBlur" />
+                      <feMergeNode in="blur" />
                       <feMergeNode in="SourceGraphic" />
                     </feMerge>
                   </filter>
                 </defs>
+                {pathLines.map((line, index) => {
+                  const isLit = getLessonStatus(index) === 'completed';
+                  const midY = (line.y1 + line.y2) / 2;
+                  const pathD = `M ${line.x1} ${line.y1} C ${line.x1} ${midY}, ${line.x2} ${midY}, ${line.x2} ${line.y2}`;
 
-                <motion.path
-                  d="M 140 0
-                     C 140 50, 160 80, 180 100
-                     C 200 120, 180 160, 140 180
-                     C 100 200, 80 240, 100 280
-                     C 120 320, 160 320, 180 360
-                     C 200 400, 180 440, 140 460
-                     C 100 480, 60 520, 80 580
-                     C 100 640, 160 660, 180 700
-                     C 200 740, 180 780, 140 820
-                     C 100 860, 80 900, 100 940
-                     C 120 980, 160 1000, 180 1040
-                     C 200 1080, 180 1120, 140 1160
-                     C 100 1200, 60 1240, 100 1300
-                     C 140 1360, 200 1360, 200 1420
-                     C 200 1480, 160 1520, 140 1560
-                     C 120 1600, 100 1640, 120 1680
-                     C 140 1720, 180 1740, 180 1780
-                     C 180 1820, 160 1860, 140 1900
-                     C 120 1940, 100 1980, 140 2020
-                     L 140 2200"
-                  stroke="#1e1b4b"
-                  strokeWidth="95"
-                  fill="none"
-                  strokeLinecap="round"
-                  opacity="0.8"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 2, ease: "easeInOut" }}
-                />
-
-                <motion.path
-                  d="M 140 0
-                     C 140 50, 160 80, 180 100
-                     C 200 120, 180 160, 140 180
-                     C 100 200, 80 240, 100 280
-                     C 120 320, 160 320, 180 360
-                     C 200 400, 180 440, 140 460
-                     C 100 480, 60 520, 80 580
-                     C 100 640, 160 660, 180 700
-                     C 200 740, 180 780, 140 820
-                     C 100 860, 80 900, 100 940
-                     C 120 980, 160 1000, 180 1040
-                     C 200 1080, 180 1120, 140 1160
-                     C 100 1200, 60 1240, 100 1300
-                     C 140 1360, 200 1360, 200 1420
-                     C 200 1480, 160 1520, 140 1560
-                     C 120 1600, 100 1640, 120 1680
-                     C 140 1720, 180 1740, 180 1780
-                     C 180 1820, 160 1860, 140 1900
-                     C 120 1940, 100 1980, 140 2020
-                     L 140 2200"
-                  stroke="url(#trailGradient)"
-                  strokeWidth="85"
-                  fill="none"
-                  strokeLinecap="round"
-                  opacity="0.9"
-                  filter="url(#softGlow)"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 2, ease: "easeInOut" }}
-                />
+                  return (
+                    <motion.path
+                      key={`path-${index}`}
+                      d={pathD}
+                      stroke={isLit ? "url(#pathLit)" : "url(#pathDim)"}
+                      strokeWidth={isLit ? 3 : 2}
+                      fill="none"
+                      strokeLinecap="round"
+                      filter={isLit ? "url(#pathGlow)" : undefined}
+                      opacity={isLit ? 0.8 : 0.3}
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: 1 }}
+                      transition={{ delay: index * 0.1 + 0.5, duration: 0.6, ease: "easeOut" }}
+                    />
+                  );
+                })}
               </svg>
-            </div>
+            )}
 
-            <div className="relative flex flex-col gap-16" style={{ zIndex: 10 }}>
+            <div className="relative flex flex-col gap-16" style={{ zIndex: 2 }}>
               {lessons.map((lesson, index) => {
                 const isUnitStart = unitStarts.includes(index);
                 const unitNumber = unitStarts.indexOf(index) + 1;
@@ -759,13 +763,15 @@ export function LessonPath() {
                       </motion.div>
                     )}
 
-                    <LessonNode
-                      lesson={lesson}
-                      status={getLessonStatus(index)}
-                      position={positions[index % positions.length]}
-                      onClick={() => handleLessonClick(index)}
-                      index={index}
-                    />
+                    <div ref={(el) => { nodeRefs.current[index] = el; }}>
+                      <LessonNode
+                        lesson={lesson}
+                        status={getLessonStatus(index)}
+                        position={positions[index % positions.length]}
+                        onClick={() => handleLessonClick(index)}
+                        index={index}
+                      />
+                    </div>
                   </div>
                 );
               })}
