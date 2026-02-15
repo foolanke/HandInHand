@@ -8,8 +8,8 @@ const baseClasses =
   "inline-flex items-center justify-center rounded-xl font-semibold transition-colors focus:outline-none disabled:opacity-50 disabled:pointer-events-none";
 
 const variantClasses: Record<ButtonVariant, string> = {
-  default: "bg-slate-900 text-white hover:bg-slate-800",
-  ghost: "bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white",
+  default: "bg-[#566246] text-[#F1F2EB] hover:bg-[#4A4A48]",
+  ghost: "bg-transparent text-[#D8DAD3] hover:bg-[#566246]/20 hover:text-[#F1F2EB]",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

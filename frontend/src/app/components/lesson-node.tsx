@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Lock, Check, Star, BookOpen, Trophy, Zap, Crown, Target } from "lucide-react";
+import { Star } from "lucide-react";
 
 interface LessonNodeProps {
   lesson: {
@@ -15,38 +15,39 @@ interface LessonNodeProps {
   index: number;
 }
 
-const iconMap = {
-  lesson: BookOpen,
-  checkpoint: Target,
-  achievement: Crown,
+// Rounder 5-pointed star with softer inner radius, in a 140x140 viewBox
+// Outer radius 65, inner radius 35, centered at 70,70
+const STAR_PATH = (() => {
+  const cx = 70, cy = 70, outerR = 62, innerR = 34, points = 5;
+  const angle = Math.PI / points;
+  let d = "";
+  for (let i = 0; i < 2 * points; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const a = i * angle - Math.PI / 2;
+    const x = cx + r * Math.cos(a);
+    const y = cy + r * Math.sin(a);
+    d += (i === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1) + " ";
+  }
+  return d + "Z";
+})();
+
+const starColors = {
+  locked: { fill: "#1e293b", stroke: "#334155", glow: "none" },
+  unlocked: { fill: "#7c3aed", stroke: "#a78bfa", glow: "0 0 30px rgba(139,92,246,0.6)" },
+  completed: { fill: "#facc15", stroke: "#fde68a", glow: "0 0 35px rgba(250,204,21,0.6)" },
 };
 
-const typeColors = {
-  lesson: {
-    completed: 'bg-gradient-to-br from-emerald-400 to-emerald-600',
-    unlocked: 'bg-gradient-to-br from-blue-400 to-blue-600',
-    locked: 'bg-gradient-to-br from-slate-600 to-slate-700',
-  },
-  checkpoint: {
-    completed: 'bg-gradient-to-br from-purple-400 to-purple-600',
-    unlocked: 'bg-gradient-to-br from-purple-400 to-purple-600',
-    locked: 'bg-gradient-to-br from-slate-600 to-slate-700',
-  },
-  achievement: {
-    completed: 'bg-gradient-to-br from-yellow-400 to-orange-500',
-    unlocked: 'bg-gradient-to-br from-yellow-400 to-orange-500',
-    locked: 'bg-gradient-to-br from-slate-600 to-slate-700',
-  },
+const checkpointColors = {
+  locked: starColors.locked,
+  unlocked: { fill: "#d97706", stroke: "#fbbf24", glow: "0 0 30px rgba(217,119,6,0.6)" },
+  completed: { fill: "#facc15", stroke: "#fde68a", glow: "0 0 35px rgba(250,204,21,0.6)" },
 };
 
 export function LessonNode({ lesson, status, position, onClick, index }: LessonNodeProps) {
-  const Icon = iconMap[lesson.type];
-  
   const isClickable = status === 'unlocked';
-  
-  const getColor = () => {
-    return typeColors[lesson.type][status];
-  };
+  const colors = lesson.type === 'checkpoint' || lesson.type === 'achievement'
+    ? checkpointColors[status]
+    : starColors[status];
 
   const positionMap = {
     left: { offsetX: -120, align: 'items-start' },
@@ -55,19 +56,6 @@ export function LessonNode({ lesson, status, position, onClick, index }: LessonN
   };
 
   const { offsetX, align } = positionMap[position];
-
-  const getBorderGlow = () => {
-    if (status === 'unlocked' && lesson.type === 'checkpoint') {
-      return 'shadow-[0_0_30px_rgba(168,85,247,0.6)]';
-    }
-    if (status === 'unlocked' && lesson.type === 'achievement') {
-      return 'shadow-[0_0_30px_rgba(251,191,36,0.6)]';
-    }
-    if (status === 'completed') {
-      return 'shadow-[0_0_20px_rgba(16,185,129,0.5)]';
-    }
-    return 'shadow-2xl';
-  };
 
   return (
     <motion.div
@@ -79,87 +67,72 @@ export function LessonNode({ lesson, status, position, onClick, index }: LessonN
     >
       <motion.button
         onClick={isClickable ? onClick : undefined}
-        className={`
-          relative w-28 h-28 rounded-full 
-          ${getColor()}
-          ${getBorderGlow()}
-          flex items-center justify-center
-          border-[6px] border-slate-800/50
-          ${isClickable ? 'cursor-pointer' : 'cursor-not-allowed'}
-          transition-all duration-200
-        `}
-        whileHover={isClickable ? { scale: 1.15, rotate: 5 } : {}}
-        whileTap={isClickable ? { scale: 0.9 } : {}}
+        className={`relative w-36 h-36 flex items-center justify-center ${isClickable ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+        whileHover={isClickable ? { scale: 1.12 } : {}}
+        whileTap={isClickable ? { scale: 0.92 } : {}}
         disabled={!isClickable}
-        animate={status === 'unlocked' ? {
-          y: [0, -10, 0],
-        } : {}}
-        transition={{
-          y: {
-            duration: 2,
-            repeat: Infinity,
-            ease: "easeInOut",
-          },
-        }}
+        animate={status === 'unlocked' ? { y: [0, -8, 0] } : {}}
+        transition={{ y: { duration: 2.5, repeat: Infinity, ease: "easeInOut" } }}
+        style={{ filter: colors.glow !== "none" ? `drop-shadow(${colors.glow})` : undefined }}
       >
-        {/* Outer glow ring for unlocked lessons */}
-        {status === 'unlocked' && (
+        {/* Pulsing glow aura */}
+        {status !== 'locked' && (
           <motion.div
-            className="absolute inset-0 rounded-full"
-            style={{
-              background: lesson.type === 'achievement' 
-                ? 'radial-gradient(circle, rgba(251,191,36,0.3) 0%, transparent 70%)'
-                : lesson.type === 'checkpoint'
-                ? 'radial-gradient(circle, rgba(168,85,247,0.3) 0%, transparent 70%)'
-                : 'radial-gradient(circle, rgba(59,130,246,0.3) 0%, transparent 70%)',
-            }}
-            animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0.2, 0.5] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          />
-        )}
-
-        <Icon className="w-14 h-14 text-white drop-shadow-2xl" strokeWidth={2.5} />
-        
-        {status === 'completed' && (
-          <motion.div
-            className="absolute -top-2 -right-2 w-12 h-12 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-full flex items-center justify-center border-4 border-slate-800 shadow-xl"
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+            className="absolute inset-0 flex items-center justify-center"
+            animate={{ scale: [1, 1.35, 1], opacity: [0.5, 0.1, 0.5] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
           >
-            <Check className="w-7 h-7 text-white" strokeWidth={3} />
+            <svg width="140" height="140" viewBox="0 0 140 140">
+              <path
+                d={STAR_PATH}
+                fill={status === 'completed' ? "rgba(250,204,21,0.3)" : "rgba(139,92,246,0.3)"}
+                stroke="none"
+                strokeLinejoin="round"
+              />
+            </svg>
           </motion.div>
         )}
-        
-        {status === 'locked' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 rounded-full backdrop-blur-sm">
-            <Lock className="w-12 h-12 text-slate-300 drop-shadow-lg" />
-          </div>
-        )}
+
+        {/* The star */}
+        <svg width="140" height="140" viewBox="0 0 140 140" className="absolute inset-0">
+          <defs>
+            <linearGradient id={`starGrad-${lesson.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor={colors.fill} />
+              <stop offset="100%" stopColor={colors.stroke} />
+            </linearGradient>
+          </defs>
+          <path
+            d={STAR_PATH}
+            fill={`url(#starGrad-${lesson.id})`}
+            stroke={colors.stroke}
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+          />
+        </svg>
 
         {/* XP Badge */}
         {status !== 'locked' && (
           <motion.div
-            className="absolute -bottom-3 bg-slate-800 rounded-full px-4 py-1.5 shadow-xl border-2 border-slate-700"
+            className="absolute -bottom-2 bg-slate-900 rounded-full px-3 py-1 shadow-xl border border-yellow-500/40"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: index * 0.08 + 0.3 }}
           >
-            <div className="flex items-center gap-1.5">
-              <Zap className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-              <span className="text-sm font-bold text-yellow-400">{lesson.xp}</span>
+            <div className="flex items-center gap-1">
+              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+              <span className="text-xs font-bold text-yellow-300">{lesson.xp} XP</span>
             </div>
           </motion.div>
         )}
       </motion.button>
-      
+
       <motion.div
         className="text-center max-w-[150px]"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: index * 0.08 + 0.2 }}
       >
-        <h3 className="font-bold text-base text-slate-100 mb-1">{lesson.title}</h3>
+        <h3 className="font-bold text-base text-white mb-1">{lesson.title}</h3>
         <p className="text-xs text-slate-400">{lesson.description}</p>
       </motion.div>
     </motion.div>
