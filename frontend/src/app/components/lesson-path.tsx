@@ -16,6 +16,8 @@ import {
   generateSlots,
   overrideSlot3,
   overrideSlot5,
+  generateUnitTestSlots,
+  overrideUnitTestAfterMiss,
   updateMastery,
 } from "../lib/lesson-algorithm";
 import { Flame, Star, TrendingUp, Settings, Sparkles } from "lucide-react";
@@ -33,8 +35,8 @@ interface Lesson {
 
 const lessons: Lesson[] = [
   { id: 1, title: "Lesson 1", description: "Greetings", type: 'lesson', xp: 10, unit: 1 },
-  { id: 2, title: "Lesson 2", description: "Greetings", type: 'lesson', xp: 10, unit: 1 },
-  { id: 3, title: "Lesson 3", description: "Common Phrases", type: 'lesson', xp: 15, unit: 1 },
+  { id: 2, title: "Lesson 2", description: "Polite Expressions", type: 'lesson', xp: 10, unit: 1 },
+  { id: 3, title: "Lesson 3", description: "Politeness Markers", type: 'lesson', xp: 15, unit: 1 },
   { id: 4, title: "Unit 1 Test", description: "Test your skills", type: 'checkpoint', xp: 25, unit: 1 },
   
   { id: 5, title: "Lesson 4", description: "Numbers & Counting", type: 'lesson', xp: 15, unit: 2 },
@@ -63,13 +65,21 @@ const lessonWords: Record<number, LessonWord[]> = {
     { word: "Goodbye", videoPath: `${import.meta.env.BASE_URL}videos/lesson1-goodbye.mp4`, correctAnswer: "Goodbye", wrongAnswers: ["Hello",   "Thank You", "Please", "Sorry"] },
   ],
   2: [
-    { word: "Please",   videoPath: `${import.meta.env.BASE_URL}videos/lesson2-please.mp4`,    correctAnswer: "Please",   wrongAnswers: ["Thank You", "Hello", "Sorry", "Goodbye"] },
-    { word: "Thank You", videoPath: `${import.meta.env.BASE_URL}videos/lesson2-thank-you.mp4`, correctAnswer: "Thank You", wrongAnswers: ["Please",    "Hello", "Sorry", "Goodbye"] },
+    { word: "Please",   videoPath: `${import.meta.env.BASE_URL}videos/lesson1-please.mp4`,    correctAnswer: "Please",   wrongAnswers: ["Thank You", "Hello", "Sorry", "Goodbye"] },
+    { word: "Thank You", videoPath: `${import.meta.env.BASE_URL}videos/lesson1-thank-you.mp4`, correctAnswer: "Thank You", wrongAnswers: ["Please",    "Hello", "Sorry", "Goodbye"] },
   ],
   3: [
-    { word: "Nice To Meet You", videoPath: `${import.meta.env.BASE_URL}videos/lesson3-nice-to-meet-you.mp4`, correctAnswer: "Nice To Meet You", wrongAnswers: ["Sorry", "Hello", "Please", "Goodbye"] },
-    { word: "Sorry",            videoPath: `${import.meta.env.BASE_URL}videos/lesson3-sorry.mp4`,            correctAnswer: "Sorry",            wrongAnswers: ["Nice To Meet You", "Hello", "Please", "Goodbye"] },
+    { word: "Nice To Meet You", videoPath: `${import.meta.env.BASE_URL}videos/lesson1-nice-to-meet-you.mp4`, correctAnswer: "Nice To Meet You", wrongAnswers: ["Sorry", "Hello", "Please", "Goodbye"] },
+    { word: "Sorry",            videoPath: `${import.meta.env.BASE_URL}videos/lesson1-sorry.mp4`,            correctAnswer: "Sorry",            wrongAnswers: ["Nice To Meet You", "Hello", "Please", "Goodbye"] },
   ],
+};
+
+// Lesson IDs belonging to each unit (used to build the unit test word pool)
+const unitLessons: Record<number, number[]> = {
+  1: [1, 2, 3],
+  2: [5, 6, 7, 8],
+  3: [10, 11, 12],
+  4: [14, 15, 16, 17, 18],
 };
 
 const positions: ('left' | 'center' | 'right')[] = [
@@ -93,8 +103,9 @@ export function LessonPath() {
   const [lessonSlots, setLessonSlots] = useState<LessonSlot[]>([]);
   const [currentSlotIndex, setCurrentSlotIndex] = useState(0);
   const masteryMap = useRef<MasteryMap>({});
-  // Track (word, wasCorrect) for each SS2 slot completed this session
   const sessionResults = useRef<{ word: string; slotIndex: number; wasCorrect: boolean }[]>([]);
+  const isUnitTest = useRef(false);
+  const currentUnitWords = useRef<LessonWord[]>([]);
 
   const level = Math.floor(totalXP / 100) + 1;
   const xpForNextLevel = (level * 100) - totalXP;
@@ -115,24 +126,38 @@ export function LessonPath() {
     setLessonSlots([]);
     setCurrentSlotIndex(0);
     sessionResults.current = [];
-    setCurrentLesson(null);
   }, []);
 
   const handleLessonClick = useCallback((lessonIndex: number) => {
     const lesson = lessons[lessonIndex];
     setCurrentLesson(lesson);
+    sessionResults.current = [];
+
+    if (lesson.type === 'checkpoint' || lesson.type === 'achievement') {
+      // Unit Test: gather all words from this unit's lessons
+      const unitWords = (unitLessons[lesson.unit] ?? []).flatMap(id => lessonWords[id] ?? []);
+      if (unitWords.length > 0) {
+        for (const w of unitWords) {
+          if (!masteryMap.current[w.word]) masteryMap.current[w.word] = defaultWordStats();
+        }
+        isUnitTest.current = true;
+        currentUnitWords.current = unitWords;
+        setLessonSlots(generateUnitTestSlots(unitWords, masteryMap.current));
+        setCurrentSlotIndex(0);
+        setActiveView('sublesson');
+      } else {
+        completeLesson(lessonIndex);
+      }
+      return;
+    }
 
     const words = lessonWords[lesson.id];
     if (lesson.type === 'lesson' && words) {
-      // Ensure mastery entries exist for all words in this lesson
       for (const w of words) {
-        if (!masteryMap.current[w.word]) {
-          masteryMap.current[w.word] = defaultWordStats();
-        }
+        if (!masteryMap.current[w.word]) masteryMap.current[w.word] = defaultWordStats();
       }
-      sessionResults.current = [];
-      const slots = generateSlots(words, masteryMap.current);
-      setLessonSlots(slots);
+      isUnitTest.current = false;
+      setLessonSlots(generateSlots(words, masteryMap.current));
       setCurrentSlotIndex(0);
       setActiveView('sublesson');
     } else {
@@ -145,7 +170,7 @@ export function LessonPath() {
     const slot = lessonSlots[currentSlotIndex];
     if (!slot) return;
 
-    const words = lessonWords[currentLesson!.id];
+    const words = isUnitTest.current ? currentUnitWords.current : (lessonWords[currentLesson!.id] ?? []);
 
     // 1. Update mastery
     masteryMap.current = updateMastery(masteryMap.current, slot, currentSlotIndex, wasCorrect);
@@ -157,14 +182,21 @@ export function LessonPath() {
 
     // 3. Apply runtime overrides
     let updatedSlots = lessonSlots;
-    if (currentSlotIndex === 1) {
-      // After slot 1 (first SS2): potentially override slot 3
-      updatedSlots = overrideSlot3(lessonSlots, words, slot.word, wasCorrect ?? true);
-      setLessonSlots(updatedSlots);
-    } else if (currentSlotIndex === 4) {
-      // After slot 4 (SS3): potentially override slot 5
-      updatedSlots = overrideSlot5(lessonSlots, words, sessionResults.current, masteryMap.current);
-      setLessonSlots(updatedSlots);
+    if (isUnitTest.current) {
+      // Unit test: after any wrong SS2, remediate 2 slots ahead
+      if (slot.type === 'ss2' && wasCorrect === false) {
+        updatedSlots = overrideUnitTestAfterMiss(lessonSlots, currentSlotIndex, slot.word, words);
+        setLessonSlots(updatedSlots);
+      }
+    } else {
+      // Regular lesson overrides
+      if (currentSlotIndex === 1) {
+        updatedSlots = overrideSlot3(lessonSlots, words, slot.word, wasCorrect ?? true);
+        setLessonSlots(updatedSlots);
+      } else if (currentSlotIndex === 4) {
+        updatedSlots = overrideSlot5(lessonSlots, words, sessionResults.current, masteryMap.current);
+        setLessonSlots(updatedSlots);
+      }
     }
 
     // 4. Advance
@@ -181,6 +213,8 @@ export function LessonPath() {
     setLessonSlots([]);
     setCurrentSlotIndex(0);
     sessionResults.current = [];
+    isUnitTest.current = false;
+    currentUnitWords.current = [];
     setCurrentLesson(null);
   }, []);
 
@@ -247,9 +281,7 @@ export function LessonPath() {
         completedLessons={completedLessons.size}
         totalLessons={lessons.length}
         dictionary={
-          Array.from(completedLessons)
-            .map(index => lessonContent[lessons[index]?.id])
-            .filter(Boolean)
+          Array.from(completedLessons).flatMap(index => lessonWords[lessons[index]?.id] ?? [])
         }
       />
 
@@ -262,7 +294,7 @@ export function LessonPath() {
             isOpen={showModal}
             xpEarned={currentLesson.xp}
             lessonTitle={currentLesson.title}
-            onContinue={() => setShowModal(false)}
+            onContinue={() => { setShowModal(false); setCurrentLesson(null); }}
           />
         )}
 

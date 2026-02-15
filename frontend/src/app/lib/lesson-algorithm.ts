@@ -220,6 +220,94 @@ export function overrideSlot5(
   return noConsecutiveType(updated, 5, words);
 }
 
+// ─── Unit Test Algorithm ──────────────────────────────────────────────────────
+
+/**
+ * Generate 10 slots for a Unit Test.
+ * Pool = all words from the unit's lessons (no prerequisites needed).
+ *
+ * Type mix (no consecutive same types, last 2 are ss3):
+ *   ss2, ss3, ss1, ss2, ss3, ss2, ss3, ss1, ss2, ss3
+ *   → 2×ss1, 4×ss2, 4×ss3
+ *
+ * Word distribution:
+ *   Weaker words (lowest recognition rate) appear up to 2× first.
+ *   Pool is filled weakest-first until 10 slots are covered.
+ *   No back-to-back same word.
+ */
+export function generateUnitTestSlots(
+  unitWords: LessonWord[],
+  masteryMap: MasteryMap,
+): LessonSlot[] {
+  const TOTAL = 12;
+  const typeSequence: SlotType[] = [
+    'ss2', 'ss3', 'ss1', 'ss2', 'ss3',
+    'ss2', 'ss3', 'ss1', 'ss2', 'ss3',
+    'ss2', 'ss3',
+  ];
+
+  const ranked = sortByWeakest(unitWords, masteryMap);
+  const maxPerWord = Math.max(2, Math.ceil(TOTAL / ranked.length));
+
+  // Build pool: fill weakest-first, each word up to maxPerWord times
+  const pool: LessonWord[] = [];
+  const appearances: Record<string, number> = {};
+  while (pool.length < TOTAL) {
+    let added = false;
+    for (const w of ranked) {
+      if (pool.length >= TOTAL) break;
+      if ((appearances[w.word] ?? 0) < maxPerWord) {
+        pool.push(w);
+        appearances[w.word] = (appearances[w.word] ?? 0) + 1;
+        added = true;
+      }
+    }
+    if (!added) break; // all words at cap (safety)
+  }
+
+  // Pair pool words with type sequence, enforcing no-back-to-back word
+  const slots: LessonSlot[] = [];
+  const available = [...pool];
+
+  for (let i = 0; i < typeSequence.length && available.length > 0; i++) {
+    const type = typeSequence[i];
+    const prevWord = slots[i - 1]?.word ?? null;
+
+    // Pick first available word that isn't back-to-back with previous
+    const idx = available.findIndex(w => w.word !== prevWord);
+    const pick = idx >= 0 ? available.splice(idx, 1)[0] : available.splice(0, 1)[0];
+    slots.push(makeSlot(type, pick));
+  }
+
+  return slots;
+}
+
+/**
+ * Called during a unit test when an SS2 slot is answered wrong.
+ * Schedules a remediation slot for the missed word 2 positions ahead
+ * (gives one slot of breathing room before the retry).
+ * Avoids consecutive type with the preceding slot.
+ */
+export function overrideUnitTestAfterMiss(
+  slots: LessonSlot[],
+  currentIndex: number,
+  missedWord: string,
+  words: LessonWord[],
+): LessonSlot[] {
+  const remediateAt = currentIndex + 2;
+  if (remediateAt >= slots.length) return slots;
+
+  const wordData = words.find(w => w.word === missedWord);
+  if (!wordData) return slots;
+
+  const updated = [...slots];
+  const prevType = updated[remediateAt - 1]?.type;
+  // Prefer ss2 retry; if that would be consecutive with previous, use ss1 refresher
+  const remedialType: SlotType = prevType === 'ss2' ? 'ss1' : 'ss2';
+  updated[remediateAt] = makeSlot(remedialType, wordData);
+  return updated;
+}
+
 /**
  * Update masteryMap for a completed slot.
  * SS1: marks introduced, updates lastSeenSlot only.
