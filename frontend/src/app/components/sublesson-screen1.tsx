@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Video, CheckCircle, RotateCcw, Loader2, Play, Pause } from 'lucide-react';
 import EvaluationModal, { type EvaluationResult } from './EvaluationModal';
+import { submitRecording } from '../lib/api';
 
 interface SublessonScreenProps {
   unitName: string;
@@ -8,37 +9,8 @@ interface SublessonScreenProps {
   videoPath: string;
   onComplete: (passed: boolean) => void;
   onBack: () => void;
-}
-
-async function submitRecording(wordPhrase: string, blob: Blob): Promise<EvaluationResult> {
-  const word = wordPhrase.toLowerCase().replace(/\s+/g, '');
-  const formData = new FormData();
-  formData.append('word', word);
-  const file = new File([blob], `${word}.webm`, { type: 'video/webm' });
-  formData.append('video', file);
-
-  const res = await fetch(`/api/evaluate-sign?word=${encodeURIComponent(word)}`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (res.status === 404) {
-    // No reference landmarks for this word yet — auto-pass silently
-    return {
-      overall_score_0_to_4: 4,
-      summary: 'Great effort! Keep practicing.',
-      pros: { points: ['Recording submitted successfully'] },
-      cons: { points: [] },
-    };
-  }
-
-  if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(detail?.detail ?? `Server error ${res.status}`);
-  }
-
-  const data = await res.json();
-  return data.evaluation ?? data;
+  fireAndForget?: boolean;
+  onRecordingSubmitted?: (blob: Blob) => void;
 }
 
 export default function SublessonScreen({
@@ -47,6 +19,8 @@ export default function SublessonScreen({
   unitName,
   onComplete,
   onBack,
+  fireAndForget = false,
+  onRecordingSubmitted,
 }: SublessonScreenProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [hasRecorded, setHasRecorded] = useState(false);
@@ -54,6 +28,7 @@ export default function SublessonScreen({
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [exampleVideoDuration, setExampleVideoDuration] = useState(0);
   const [recordingTimeLeft, setRecordingTimeLeft] = useState(0);
+  const [submitted, setSubmitted] = useState(false);
 
   const [evaluating, setEvaluating] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
@@ -61,6 +36,7 @@ export default function SublessonScreen({
   const attemptRef = useRef(0);
   const [attempt, setAttempt] = useState(0);
   const [recordedPlaying, setRecordedPlaying] = useState(false);
+  const [hasRerecorded, setHasRerecorded] = useState(false);
   // Track whether the pending action after eval is "complete" or "try-again"
   const pendingAction = useRef<'complete' | 'retry'>('complete');
 
@@ -126,7 +102,7 @@ export default function SublessonScreen({
       attemptRef.current = nextAttempt;
       setAttempt(nextAttempt);
 
-      if (nextAttempt >= 2) {
+      if (!fireAndForget && nextAttempt >= 2) {
         evaluate(blob, 'complete');
       }
     };
@@ -178,6 +154,7 @@ export default function SublessonScreen({
 
   const handleTryAgain = () => {
     if (attemptRef.current < 1) return;
+    setHasRerecorded(true);
     setHasRecorded(false);
     setRecordedBlob(null);
     setEvalResult(null);
@@ -214,6 +191,15 @@ export default function SublessonScreen({
     resetRecording();
   };
 
+  const handleFireAndForgetSubmit = () => {
+    if (!recordedBlob) return;
+    onRecordingSubmitted?.(recordedBlob);
+    setSubmitted(true);
+    setTimeout(() => {
+      onComplete(true);
+    }, 1000);
+  };
+
   useEffect(() => {
     if (stream && userVideoRef.current) userVideoRef.current.srcObject = stream;
   }, [stream, hasRecorded]);
@@ -229,8 +215,8 @@ export default function SublessonScreen({
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
-      {/* Evaluation modal overlay */}
-      {evalResult && (
+      {/* Evaluation modal overlay (only in non-fire-and-forget mode) */}
+      {!fireAndForget && evalResult && (
         <EvaluationModal
           result={evalResult}
           onContinue={handleModalContinue}
@@ -383,7 +369,7 @@ export default function SublessonScreen({
                   </button>
                 </div>
 
-                {evalError && (
+                {!fireAndForget && evalError && (
                   <div className="bg-red-900/50 border-2 border-red-600 rounded-xl p-4 text-red-200 text-base text-center font-medium shadow-lg">
                     {evalError}
                     <button
@@ -395,30 +381,58 @@ export default function SublessonScreen({
                   </div>
                 )}
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleTryAgain}
-                    disabled={evaluating}
-                    className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-5 rounded-xl font-bold text-lg transition shadow-lg flex items-center justify-center gap-2 border-2 border-slate-600"
-                  >
-                    {evaluating && pendingAction.current === 'retry' ? (
-                      <><Loader2 size={22} className="animate-spin" /> Evaluating...</>
-                    ) : (
-                      <><RotateCcw size={22} /> Try Again</>
+                {fireAndForget ? (
+                  submitted ? (
+                    <div className="bg-green-900/50 border-2 border-green-600 rounded-2xl p-8 text-center shadow-2xl">
+                      <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-3" />
+                      <h3 className="text-2xl font-bold text-green-300">Submitted!</h3>
+                    </div>
+                  ) : (
+                    <div className="flex gap-3">
+                      {!hasRerecorded && (
+                        <button
+                          onClick={handleTryAgain}
+                          className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-purple-700 hover:to-purple-800 text-white px-6 py-5 rounded-xl font-bold text-lg transition shadow-lg flex items-center justify-center gap-2 border-2 border-slate-600"
+                        >
+                          <RotateCcw size={22} /> Re-record
+                        </button>
+                      )}
+                      <button
+                        onClick={handleFireAndForgetSubmit}
+                        className="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white px-6 py-5 rounded-xl font-bold text-lg transition shadow-2xl flex items-center justify-center gap-2 border-2 border-purple-400 transform hover:scale-105"
+                      >
+                        <CheckCircle size={22} /> Submit Recording
+                      </button>
+                    </div>
+                  )
+                ) : (
+                  <div className="flex gap-3">
+                    {!hasRerecorded && (
+                      <button
+                        onClick={handleTryAgain}
+                        disabled={evaluating}
+                        className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-5 rounded-xl font-bold text-lg transition shadow-lg flex items-center justify-center gap-2 border-2 border-slate-600"
+                      >
+                        {evaluating && pendingAction.current === 'retry' ? (
+                          <><Loader2 size={22} className="animate-spin" /> Evaluating...</>
+                        ) : (
+                          <><RotateCcw size={22} /> Try Again</>
+                        )}
+                      </button>
                     )}
-                  </button>
-                  <button
-                    onClick={handleComplete}
-                    disabled={evaluating}
-                    className="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-5 rounded-xl font-bold text-lg transition shadow-2xl flex items-center justify-center gap-2 border-2 border-purple-400 transform hover:scale-105"
-                  >
-                    {evaluating && pendingAction.current === 'complete' ? (
-                      <><Loader2 size={22} className="animate-spin" /> Evaluating...</>
-                    ) : (
-                      <><CheckCircle size={22} /> Complete</>
-                    )}
-                  </button>
-                </div>
+                    <button
+                      onClick={handleComplete}
+                      disabled={evaluating}
+                      className="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-5 rounded-xl font-bold text-lg transition shadow-2xl flex items-center justify-center gap-2 border-2 border-purple-400 transform hover:scale-105"
+                    >
+                      {evaluating && pendingAction.current === 'complete' ? (
+                        <><Loader2 size={22} className="animate-spin" /> Evaluating...</>
+                      ) : (
+                        <><CheckCircle size={22} /> Complete</>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

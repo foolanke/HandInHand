@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { ArrowLeft, Play, Pause, CheckCircle, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle, X } from 'lucide-react';
 
 interface MultipleChoiceQuizProps {
   unitName: string;
@@ -24,9 +24,7 @@ export default function MultipleChoiceQuiz({
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
-  const [attemptCount, setAttemptCount] = useState(0);
-  const firstAttemptCorrect = useRef<boolean | null>(null);
-  
+
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Shuffle answers
@@ -54,31 +52,17 @@ export default function MultipleChoiceQuiz({
     const correct = answer === correctAnswer;
     setIsCorrect(correct);
     setHasAnswered(true);
-    const newAttemptCount = attemptCount + 1;
-    setAttemptCount(newAttemptCount);
-
-    // Record first attempt only (retries don't change the mastery signal)
-    if (firstAttemptCorrect.current === null) {
-      firstAttemptCorrect.current = correct;
-    }
 
     if (correct) {
       setTimeout(() => {
-        onComplete(firstAttemptCorrect.current ?? true);
+        onComplete(true);
       }, 1500);
-    } else if (newAttemptCount >= 2) {
-      // Second wrong attempt — show correct answer and move on
+    } else {
+      // Single attempt — show correct answer and move on
       setTimeout(() => {
         onComplete(false);
       }, 2000);
     }
-    // First wrong attempt: stay, let user try again (no auto-advance)
-  };
-
-  const handleTryAgain = () => {
-    setSelectedAnswer(null);
-    setIsCorrect(null);
-    setHasAnswered(false);
   };
 
   return (
@@ -114,8 +98,8 @@ export default function MultipleChoiceQuiz({
               preload="auto"
               playsInline
               onEnded={() => setIsPlaying(false)}
-              onLoadedMetadata={() => console.log('✅ Video loaded')}
-              onError={(e) => console.error('❌ Video error:', e)}
+              onLoadedMetadata={() => console.log('Video loaded')}
+              onError={(e) => console.error('Video error:', e)}
             >
               Your browser does not support the video tag.
             </video>
@@ -126,7 +110,7 @@ export default function MultipleChoiceQuiz({
         <div className="space-y-4 max-w-2xl mx-auto">
           {options.map((option, index) => {
             const isSelected = selectedAnswer === option;
-            const showCorrect = hasAnswered && option === correctAnswer && attemptCount >= 2;
+            const showCorrect = hasAnswered && option === correctAnswer && !isCorrect;
             const showWrong = hasAnswered && isSelected && !isCorrect;
 
             let buttonClass = "w-full px-8 py-5 rounded-xl font-bold text-lg transition shadow-lg flex items-center justify-between ";
@@ -168,26 +152,14 @@ export default function MultipleChoiceQuiz({
             {isCorrect ? (
               <div className="bg-green-900/50 border-2 border-green-600 rounded-2xl p-8 text-center shadow-2xl">
                 <CheckCircle className="w-20 h-20 text-green-400 mx-auto mb-4" />
-                <h3 className="text-3xl font-bold text-green-300 mb-3">Correct! 🎉</h3>
-                <p className="text-xl text-slate-200">Great job! Moving to next lesson...</p>
+                <h3 className="text-3xl font-bold text-green-300 mb-3">Correct!</h3>
+                <p className="text-xl text-slate-200">Great job! Moving on...</p>
               </div>
-            ) : attemptCount >= 2 ? (
+            ) : (
               <div className="bg-red-900/50 border-2 border-red-600 rounded-2xl p-8 text-center shadow-2xl">
                 <X className="w-20 h-20 text-red-400 mx-auto mb-4" />
                 <h3 className="text-3xl font-bold text-red-300 mb-3">Not quite!</h3>
                 <p className="text-xl text-slate-200">The correct answer is "{correctAnswer}"</p>
-              </div>
-            ) : (
-              <div className="bg-red-900/40 border-2 border-red-600/50 rounded-2xl p-8 text-center shadow-2xl">
-                <X className="w-20 h-20 text-red-400 mx-auto mb-4" />
-                <h3 className="text-3xl font-bold text-red-300 mb-3">Not quite!</h3>
-                <p className="text-xl text-slate-200 mb-6">Give it another try!</p>
-                <button
-                  onClick={handleTryAgain}
-                  className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white px-10 py-4 rounded-xl font-bold text-lg transition shadow-2xl border-2 border-purple-400 transform hover:scale-105"
-                >
-                  Try Again
-                </button>
               </div>
             )}
           </div>
@@ -200,7 +172,7 @@ export default function MultipleChoiceQuiz({
               <span className="text-2xl">💡</span>
               Tip:
             </h4>
-            <p className="text-slate-200 text-base font-medium">You can replay the video as many times as you need before selecting your answer!</p>
+            <p className="text-slate-200 text-base font-medium">You only get one chance — watch carefully before selecting your answer!</p>
           </div>
         </div>
       </div>
