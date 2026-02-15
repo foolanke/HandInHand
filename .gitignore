@@ -1,7 +1,44 @@
+# macOS
 .DS_Store
-node_modules/
-dist
-.vite
 
+# Node/Frontend
+node_modules/
+dist/
+.vite/
+
+# Python
 __pycache__/
-.pytest_cahce/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+env/
+env1/
+venv/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+test_outputs/
+*_outputs/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+
+# Build/Distribution
+*.egg-info/
+dist/
+build/
+*.egg
