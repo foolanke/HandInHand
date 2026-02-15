@@ -14,11 +14,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 class RatingResponse(BaseModel):
     rating: float
     message: str
-
 
 
 @app.post("/rating", response_model=Response)

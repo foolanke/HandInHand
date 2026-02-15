@@ -2,6 +2,12 @@ import cv2
 import mediapipe as mp
 import json
 from pathlib import Path
+import os
+
+# Get the directory where this script is located
+SCRIPT_DIR = Path(__file__).parent
+REFERENCE_VIDEOS_DIR = SCRIPT_DIR / 'reference_videos'
+REFERENCE_LANDMARKS_DIR = SCRIPT_DIR / 'reference_landmarks'
 
 mp_face_mesh = mp.solutions.face_mesh
 mp_hands = mp.solutions.hands
@@ -39,7 +45,7 @@ def extract_landmarks_from_video(video_path, word, show_preview=True):
     )
     
     # Open video
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(str(video_path))
     
     if not cap.isOpened():
         print(f"❌ Error: Could not open video file: {video_path}")
@@ -179,31 +185,34 @@ def extract_landmarks_from_video(video_path, word, show_preview=True):
         'total_frames': frame_count,
         'frames_with_hands': frames_with_hands,
         'fps': fps,
-        'video_file': video_path,
+        'video_file': str(video_path),
         'frames': landmarks_data
     }
     
     # Create output directory
-    Path('reference_landmarks').mkdir(exist_ok=True)
+    REFERENCE_LANDMARKS_DIR.mkdir(exist_ok=True)
     
-    output_path = f'reference_landmarks/{word}.json'
+    output_path = REFERENCE_LANDMARKS_DIR / f'{word}.json'
     
     with open(output_path, 'w') as f:
         json.dump(output_data, f, indent=2)
     
     print(f"\n💾 Saved landmarks to: {output_path}")
-    print(f"📊 File size: {Path(output_path).stat().st_size / 1024:.1f} KB")
+    print(f"📊 File size: {output_path.stat().st_size / 1024:.1f} KB")
     
-    return output_path
+    return str(output_path)
 
 
-def extract_multiple_videos(video_folder='reference_videos'):
+def extract_multiple_videos(video_folder=None):
     """
     Extract landmarks from all videos in a folder
-    Assumes videos are named like: hello.mp4, goodbye.mp4, etc.
+    Assumes videos are named like: please.mp4, please.mp4, etc.
     """
     
-    video_folder = Path(video_folder)
+    if video_folder is None:
+        video_folder = REFERENCE_VIDEOS_DIR
+    else:
+        video_folder = Path(video_folder)
     
     if not video_folder.exists():
         print(f"❌ Folder not found: {video_folder}")
@@ -244,13 +253,25 @@ if __name__ == "__main__":
     print("\nThis script extracts hand and face landmarks from reference videos")
     print("and saves them as JSON files for comparison with user attempts.\n")
     
-    # Choose one of these options:
+    # Check if reference_videos folder exists
+    if not REFERENCE_VIDEOS_DIR.exists():
+        print(f"❌ Creating reference_videos folder at: {REFERENCE_VIDEOS_DIR}")
+        REFERENCE_VIDEOS_DIR.mkdir(exist_ok=True)
+        print(f"   Please add your reference videos to this folder and run again.")
+        exit()
     
     # OPTION 1: Extract from a single video
-    extract_landmarks_from_video('reference_videos/hello.mp4', 'hello', show_preview=True)
+    video_path = REFERENCE_VIDEOS_DIR / 'please.mp4'
+    if video_path.exists():
+        extract_landmarks_from_video(str(video_path), 'please', show_preview=True)
+    else:
+        print(f"❌ Video not found: {video_path}")
+        print(f"\n   Available options:")
+        print(f"   1. Add 'please.mp4' to {REFERENCE_VIDEOS_DIR}")
+        print(f"   2. Or uncomment OPTION 2 below to process all videos\n")
     
     # OPTION 2: Extract from all videos in reference_videos folder
-    # extract_multiple_videos('reference_videos')
+    # extract_multiple_videos()
     
     print("\n✅ Done! Your reference landmarks are ready.")
-    print("   You can now use these JSON files to compare with user recordings.\n")
+    print(f"   Saved to: {REFERENCE_LANDMARKS_DIR}\n")
