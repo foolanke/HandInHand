@@ -1,12 +1,44 @@
 import { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Play, Pause, Video, CheckCircle, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Video, CheckCircle, RotateCcw, Loader2, Play, Pause } from 'lucide-react';
+import EvaluationModal, { type EvaluationResult } from './EvaluationModal';
 
 interface SublessonScreenProps {
   unitName: string;
   wordPhrase: string;
   videoPath: string;
-  onComplete: () => void;
+  onComplete: (passed: boolean) => void;
   onBack: () => void;
+}
+
+async function submitRecording(wordPhrase: string, blob: Blob): Promise<EvaluationResult> {
+  const word = wordPhrase.toLowerCase().replace(/\s+/g, '');
+  const formData = new FormData();
+  formData.append('word', word);
+  const file = new File([blob], `${word}.webm`, { type: 'video/webm' });
+  formData.append('video', file);
+
+  const res = await fetch(`/api/evaluate-sign?word=${encodeURIComponent(word)}`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (res.status === 404) {
+    // No reference landmarks for this word yet — auto-pass silently
+    return {
+      overall_score_0_to_4: 4,
+      summary: 'Great effort! Keep practicing.',
+      pros: { points: ['Recording submitted successfully'] },
+      cons: { points: [] },
+    };
+  }
+
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail?.detail ?? `Server error ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.evaluation ?? data;
 }
 
 export default function SublessonScreen({
@@ -14,37 +46,38 @@ export default function SublessonScreen({
   videoPath,
   unitName,
   onComplete,
-  onBack
+  onBack,
 }: SublessonScreenProps) {
-  const [isExamplePlaying, setIsExamplePlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [hasRecorded, setHasRecorded] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [exampleVideoDuration, setExampleVideoDuration] = useState(0);
   const [recordingTimeLeft, setRecordingTimeLeft] = useState(0);
-  const [reRecordCount, setReRecordCount] = useState(0);
-  
+
+  const [evaluating, setEvaluating] = useState(false);
+  const [evalError, setEvalError] = useState<string | null>(null);
+  const [evalResult, setEvalResult] = useState<EvaluationResult | null>(null);
+  const attemptRef = useRef(0);
+  const [attempt, setAttempt] = useState(0);
+  const [recordedPlaying, setRecordedPlaying] = useState(false);
+  // Track whether the pending action after eval is "complete" or "try-again"
+  const pendingAction = useRef<'complete' | 'retry'>('complete');
+
   const exampleVideoRef = useRef<HTMLVideoElement>(null);
   const userVideoRef = useRef<HTMLVideoElement>(null);
   const recordedVideoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Start camera access
   const startCamera = async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: {
-          facingMode: 'user', // Use front camera
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }, 
-        audio: false 
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
       });
-      console.log('✅ Camera access granted');
       setStream(mediaStream);
     } catch (error) {
       console.error('❌ Error accessing camera:', error);
@@ -52,188 +85,163 @@ export default function SublessonScreen({
     }
   };
 
-  // Stop camera
   const stopCamera = () => {
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((track) => track.stop());
       setStream(null);
     }
   };
 
-  // Start recording
   const startRecording = () => {
-    if (!stream) {
-      console.error('❌ No stream available');
-      return;
-    }
-    
+    if (!stream) return;
+
     chunksRef.current = [];
     const mediaRecorder = new MediaRecorder(stream);
     mediaRecorderRef.current = mediaRecorder;
 
     mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunksRef.current.push(event.data);
-      }
+      if (event.data.size > 0) chunksRef.current.push(event.data);
     };
 
     mediaRecorder.onstop = () => {
-      console.log('📼 MediaRecorder stopped, processing chunks...');
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-      console.log('📦 Blob created, size:', blob.size, 'bytes');
+
+      console.log("REC STOP:");
+      console.log("chunks:", chunksRef.current.map(c => c.size));
+      console.log("blob.size:", blob.size);
+      console.log("blob.type:", blob.type);
       setRecordedBlob(blob);
       setHasRecorded(true);
-      
-      // Wait a bit for React to render the video element
+
       setTimeout(() => {
         if (recordedVideoRef.current) {
           const url = URL.createObjectURL(blob);
           recordedVideoRef.current.src = url;
-          recordedVideoRef.current.load(); // Force load
-          console.log('✅ Recording saved and loaded, URL:', url);
-          
-          // Try to play
-          recordedVideoRef.current.play().catch(err => {
-            console.log('Auto-play blocked:', err);
-          });
-        } else {
-          console.error('❌ recordedVideoRef.current is null!');
-        }
-        
-        // If this is the second recording (after one re-record), auto-submit
-        if (reRecordCount >= 1) {
-          console.log('🎯 Second recording complete - auto-submitting in 2 seconds...');
-          setTimeout(() => {
-            onComplete();
-          }, 2000);
+          recordedVideoRef.current.load();
+          recordedVideoRef.current.play().catch(() => {});
         }
       }, 100);
+
+      const nextAttempt = attemptRef.current + 1;
+      attemptRef.current = nextAttempt;
+      setAttempt(nextAttempt);
+
+      if (nextAttempt >= 2) {
+        evaluate(blob, 'complete');
+      }
     };
 
     mediaRecorder.start();
     setIsRecording(true);
-    console.log('🔴 Recording started');
-    console.log('📏 Example video duration:', exampleVideoDuration, 'seconds');
 
-    // Auto-stop after 2x the example video duration
     const maxDuration = exampleVideoDuration * 2 * 1000;
     setRecordingTimeLeft(exampleVideoDuration * 2);
-    console.log(`⏱️ Max recording duration: ${exampleVideoDuration * 2} seconds (${maxDuration}ms)`);
-    
-    // Countdown timer for display
+
     const startTime = Date.now();
     countdownIntervalRef.current = setInterval(() => {
-      const elapsed = (Date.now() - startTime) / 1000;
-      const remaining = Math.max(0, (exampleVideoDuration * 2) - elapsed);
+      const remaining = Math.max(0, exampleVideoDuration * 2 - (Date.now() - startTime) / 1000);
       setRecordingTimeLeft(remaining);
-      
-      if (remaining <= 0 && countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-      }
+      if (remaining <= 0 && countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     }, 100);
-    
-    recordingTimerRef.current = setTimeout(() => {
-      console.log('⏹️ Auto-stopping recording (max duration reached)');
-      stopRecording();
-    }, maxDuration);
+
+    recordingTimerRef.current = setTimeout(() => stopRecording(), maxDuration);
   };
 
-  // Stop recording
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      console.log('⏹️ Stopping recording, current state:', mediaRecorderRef.current.state);
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      
-      // Clear the auto-stop timer
-      if (recordingTimerRef.current) {
-        clearTimeout(recordingTimerRef.current);
-        recordingTimerRef.current = null;
-      }
-      
-      // Clear countdown interval
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-        countdownIntervalRef.current = null;
-      }
-      
-      // DON'T stop camera - keep it running for potential re-record
-      console.log('📹 Camera stream kept active for potential re-record');
-    } else {
-      console.log('⚠️ Cannot stop - recorder is not active');
+      if (recordingTimerRef.current) { clearTimeout(recordingTimerRef.current); recordingTimerRef.current = null; }
+      if (countdownIntervalRef.current) { clearInterval(countdownIntervalRef.current); countdownIntervalRef.current = null; }
     }
   };
 
-  // Reset and try again
-  const resetRecording = () => {
-    const newCount = reRecordCount + 1;
-    setReRecordCount(newCount);
-    
-    console.log(`🔄 Re-recording attempt ${newCount}/1`);
-    console.log('📹 Camera should still be active, returning to recording view');
-    
-    // Clear the recorded video
+  const evaluate = async (blob: Blob, action: 'complete' | 'retry') => {
+    if (evaluating) return;
+    pendingAction.current = action;
+    setEvalError(null);
+    setEvaluating(true);
+    try {
+      const result = await submitRecording(wordPhrase, blob);
+      setEvalResult(result);
+    } catch (err) {
+      setEvalError(err instanceof Error ? err.message : 'Evaluation failed. Please try again.');
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
+  const handleComplete = () => {
+    if (!recordedBlob || evaluating) return;
+    evaluate(recordedBlob, 'complete');
+  };
+
+  const handleTryAgain = () => {
+    if (attemptRef.current < 1) return;
     setHasRecorded(false);
     setRecordedBlob(null);
+    setEvalResult(null);
+    setEvalError(null);
     if (recordedVideoRef.current) {
-      // Revoke the old blob URL to free memory
-      if (recordedVideoRef.current.src) {
-        URL.revokeObjectURL(recordedVideoRef.current.src);
-      }
+      if (recordedVideoRef.current.src) URL.revokeObjectURL(recordedVideoRef.current.src);
       recordedVideoRef.current.src = '';
     }
-    
-    // Clear any pending timer
-    if (recordingTimerRef.current) {
-      clearTimeout(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
   };
 
-  // Play/pause example video
-  const toggleExampleVideo = () => {
-    if (exampleVideoRef.current) {
-      if (isExamplePlaying) {
-        exampleVideoRef.current.pause();
-        setIsExamplePlaying(false);
-      } else {
-        exampleVideoRef.current.play();
-        setIsExamplePlaying(true);
-      }
+  const resetRecording = () => {
+    setHasRecorded(false);
+    setRecordedBlob(null);
+    setEvalResult(null);
+    setEvalError(null);
+    attemptRef.current = 0;
+    setAttempt(0);
+    if (recordedVideoRef.current) {
+      if (recordedVideoRef.current.src) URL.revokeObjectURL(recordedVideoRef.current.src);
+      recordedVideoRef.current.src = '';
     }
+    if (recordingTimerRef.current) { clearTimeout(recordingTimerRef.current); recordingTimerRef.current = null; }
   };
 
-  // Attach camera stream to video element when stream is available
+  // Modal handlers
+  const handleModalContinue = () => {
+    const passed = (evalResult?.overall_score_0_to_4 ?? 0) >= 3;
+    setEvalResult(null);
+    onComplete(passed);
+  };
+
+  const handleModalTryAgain = () => {
+    setEvalResult(null);
+    resetRecording();
+  };
+
   useEffect(() => {
-    if (stream && userVideoRef.current) {
-      userVideoRef.current.srcObject = stream;
-      console.log('✅ Camera stream attached to video element');
-    }
-  }, [stream, hasRecorded]); // Re-run when hasRecorded changes too
+    if (stream && userVideoRef.current) userVideoRef.current.srcObject = stream;
+  }, [stream, hasRecorded]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopCamera();
-      // Clear recording timer if exists
-      if (recordingTimerRef.current) {
-        clearTimeout(recordingTimerRef.current);
-      }
-      // Clear countdown interval if exists
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-      }
+      if (recordingTimerRef.current) clearTimeout(recordingTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      attemptRef.current = 0;
     };
   }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900 text-white">
+      {/* Evaluation modal overlay */}
+      {evalResult && (
+        <EvaluationModal
+          result={evalResult}
+          onContinue={handleModalContinue}
+          onTryAgain={handleModalTryAgain}
+          hideTryAgain
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between p-6">
-        <button 
-          onClick={onBack}
-          className="flex items-center gap-2 text-purple-300 hover:text-white transition"
-        >
+        <button onClick={onBack} className="flex items-center gap-2 text-purple-300 hover:text-white transition">
           <ArrowLeft size={24} />
           <span>Back</span>
         </button>
@@ -242,14 +250,13 @@ export default function SublessonScreen({
       </div>
 
       <div className="max-w-6xl mx-auto px-6 pb-12">
-        {/* Word/Phrase Title */}
         <div className="text-center mb-8">
           <h2 className="text-4xl font-bold text-purple-300 mb-2">{wordPhrase}</h2>
           <p className="text-gray-300">Watch the example to sign "{wordPhrase}", then record yourself!</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
-          {/* Example Video Section */}
+          {/* Example Video */}
           <div className="space-y-4">
             <h3 className="text-xl font-semibold text-gray-200 flex items-center gap-2">
               <span className="bg-purple-700 rounded-full w-8 h-8 flex items-center justify-center text-sm">1</span>
@@ -263,29 +270,21 @@ export default function SublessonScreen({
                 className="w-full aspect-video object-cover bg-black"
                 preload="auto"
                 playsInline
-                onEnded={() => setIsExamplePlaying(false)}
-                onLoadedMetadata={(e) => {
-                  const duration = (e.target as HTMLVideoElement).duration;
-                  setExampleVideoDuration(duration);
-                  console.log('✅ Video metadata loaded');
-                  console.log('📏 Video duration:', duration, 'seconds');
-                  console.log('⏱️ Max recording time will be:', duration * 2, 'seconds');
-                }}
-                onCanPlay={() => console.log('✅ Video can play')}
-                onError={(e) => console.error('❌ Video error:', e)}
+                onEnded={() => {}}
+                onLoadedMetadata={(e) => setExampleVideoDuration((e.target as HTMLVideoElement).duration)}
               >
                 Your browser does not support the video tag.
               </video>
             </div>
           </div>
 
-          {/* User Recording Section */}
+          {/* User Recording */}
           <div className="space-y-4">
             <h3 className="text-xl font-semibold text-gray-200 flex items-center gap-2">
               <span className="bg-purple-700 rounded-full w-8 h-8 flex items-center justify-center text-sm">2</span>
               Your Turn
             </h3>
-            
+
             {!stream && !hasRecorded && (
               <div className="bg-gray-800 rounded-2xl p-12 text-center shadow-2xl aspect-video flex flex-col items-center justify-center">
                 <Video className="w-16 h-16 text-purple-300 mb-4" />
@@ -308,12 +307,6 @@ export default function SublessonScreen({
                     muted
                     playsInline
                     className="w-full aspect-video object-cover bg-black scale-x-[-1]"
-                    onLoadedMetadata={() => {
-                      console.log('✅ Camera stream loaded');
-                      console.log('Video dimensions:', userVideoRef.current?.videoWidth, 'x', userVideoRef.current?.videoHeight);
-                      console.log('Stream active:', stream?.active);
-                      console.log('Stream video tracks:', stream?.getVideoTracks());
-                    }}
                   >
                     Your browser does not support video.
                   </video>
@@ -324,9 +317,7 @@ export default function SublessonScreen({
                         <span className="text-sm font-semibold">Recording</span>
                       </div>
                       <div className="bg-black bg-opacity-70 px-3 py-1 rounded-full">
-                        <span className="text-xs font-mono text-white">
-                          {Math.ceil(recordingTimeLeft)}s left
-                        </span>
+                        <span className="text-xs font-mono text-white">{Math.ceil(recordingTimeLeft)}s left</span>
                       </div>
                     </div>
                   )}
@@ -348,10 +339,7 @@ export default function SublessonScreen({
                       Stop Recording
                     </button>
                   )}
-                  <button
-                    onClick={stopCamera}
-                    className="px-6 py-4 bg-gray-700 hover:bg-purple-700 rounded-xl transition"
-                  >
+                  <button onClick={stopCamera} className="px-6 py-4 bg-gray-700 hover:bg-purple-700 rounded-xl transition">
                     Cancel
                   </button>
                 </div>
@@ -363,64 +351,69 @@ export default function SublessonScreen({
                 <div className="relative bg-gray-800 rounded-2xl overflow-hidden shadow-2xl">
                   <video
                     ref={recordedVideoRef}
-                    controls
                     playsInline
                     className="w-full aspect-video object-cover bg-black scale-x-[-1]"
-                    onLoadedData={() => {
-                      console.log('✅ Recorded video loaded successfully!');
-                      console.log('Video src:', recordedVideoRef.current?.src);
-                      console.log('Video duration:', recordedVideoRef.current?.duration);
-                      // Try to play automatically
-                      if (recordedVideoRef.current) {
-                        recordedVideoRef.current.play().catch(err => {
-                          console.log('Auto-play blocked, user must click play:', err);
-                        });
-                      }
-                    }}
-                    onError={(e) => {
-                      console.error('❌ Recorded video error:', e);
-                      const video = e.target as HTMLVideoElement;
-                      console.error('Video src:', video.src);
-                      console.error('Video error code:', video.error?.code);
-                      console.error('Video error message:', video.error?.message);
-                    }}
+                    onLoadedData={() => recordedVideoRef.current?.play().catch(() => {})}
+                    onPlay={() => setRecordedPlaying(true)}
+                    onPause={() => setRecordedPlaying(false)}
+                    onEnded={() => setRecordedPlaying(false)}
+                    onError={(e) => console.error('❌ Recorded video error:', e)}
                   >
                     Your browser does not support the video tag.
                   </video>
+                  <button
+                    onClick={() => {
+                      const v = recordedVideoRef.current;
+                      if (!v) return;
+                      v.paused ? v.play().catch(() => {}) : v.pause();
+                    }}
+                    className="absolute bottom-3 left-3 bg-black/60 hover:bg-black/80 text-white rounded-full p-2 transition"
+                  >
+                    {recordedPlaying ? <Pause size={18} /> : <Play size={18} />}
+                  </button>
                 </div>
-                
-                {reRecordCount >= 1 ? (
-                  // Second recording - show auto-submit message
-                  <div className="bg-purple-900/20 border border-purple-500/40 rounded-xl p-6 text-center">
-                    <CheckCircle className="w-12 h-12 text-purple-300 mx-auto mb-3" />
-                    <h3 className="text-xl font-semibold text-purple-300 mb-2">Great job!</h3>
-                    <p className="text-gray-300">Submitting your recording...</p>
-                  </div>
-                ) : (
-                  // First recording - show buttons
-                  <div className="flex gap-3">
+
+                {evalError && (
+                  <div className="bg-red-900/40 border border-red-600/50 rounded-xl p-3 text-red-300 text-sm text-center">
+                    {evalError}
                     <button
-                      onClick={resetRecording}
-                      className="flex-1 bg-gray-700 hover:bg-purple-700 text-white px-6 py-4 rounded-xl font-semibold transition shadow-lg flex items-center justify-center gap-2"
+                      onClick={() => recordedBlob && evaluate(recordedBlob, pendingAction.current)}
+                      className="ml-2 underline hover:text-white transition"
                     >
-                      <RotateCcw size={20} />
-                      Try Again (1 re-record left)
-                    </button>
-                    <button
-                      onClick={onComplete}
-                      className="flex-1 bg-purple-700 hover:bg-purple-600 text-white px-6 py-4 rounded-xl font-semibold transition shadow-lg flex items-center justify-center gap-2"
-                    >
-                      <CheckCircle size={20} />
-                      Complete
+                      Retry
                     </button>
                   </div>
                 )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleTryAgain}
+                    disabled={evaluating}
+                    className="flex-1 bg-gray-700 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-xl font-semibold transition shadow-lg flex items-center justify-center gap-2"
+                  >
+                    {evaluating && pendingAction.current === 'retry' ? (
+                      <><Loader2 size={20} className="animate-spin" /> Evaluating...</>
+                    ) : (
+                      <><RotateCcw size={20} /> Try Again</>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleComplete}
+                    disabled={evaluating}
+                    className="flex-1 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-xl font-semibold transition shadow-lg flex items-center justify-center gap-2"
+                  >
+                    {evaluating && pendingAction.current === 'complete' ? (
+                      <><Loader2 size={20} className="animate-spin" /> Evaluating...</>
+                    ) : (
+                      <><CheckCircle size={20} /> Complete</>
+                    )}
+                  </button>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Instructions */}
         <div className="mt-12 bg-purple-900/20 rounded-2xl p-6 border border-purple-700/40">
           <h4 className="font-semibold text-lg mb-3 text-gray-200">💡 Tips:</h4>
           <ul className="space-y-2 text-gray-300">

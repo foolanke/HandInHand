@@ -1,6 +1,6 @@
 {
-  "task": "You are evaluating sign language word attempts. Compare a user's landmark sequence to a demonstrator's landmark sequence representing the correct execution of the same sign language word. The user is attempting to do the same sign as the professional.",
-  
+  "task": "You are evaluating sign language word attempts. Compare a user's landmark sequence to a demonstrator's landmark sequence representing the correct execution of the same sign language word. The user is attempting to do the same sign as the professional. Be lenient: most imperfect-but-recognizable attempts should score 3. If uncertain between two scores, choose the higher score.",
+
   "context": {
     "domain": "Sign language word evaluation",
     "description": "Each evaluation compares one user attempt of a single sign language word against a perfect demonstrator performing the same word.",
@@ -10,228 +10,234 @@
   "input_contract": {
     "demonstrator_key": "demonstrator",
     "user_attempt_key": "user_attempt",
-    "alignment": "Implicitly infer alignment by comparing motion and phase similarity."
+    "alignment": "Implicitly infer alignment by comparing motion and phase similarity. Be tolerant to timing differences."
   },
 
   "judging_rules": {
-    "primary_principle": "Score based on similarity to the demonstrator.",
+    "primary_principle": "Score based on whether the user conveys the sign’s core idea, not perfect imitation. Be forgiving of natural variation.",
     "limitations": [
       "Judge only from landmark geometry and motion.",
       "Do not infer visual appearance not encoded in landmarks.",
-      "Evaluate each criterion independently.",
+      "Prioritize overall meaning and major motion phases over fine details.",
+      "Allow reasonable variation in timing, amplitude, and exact location.",
+      "Treat landmark noise and camera framing as common.",
       "Use a 0–4 scale for scoring."
     ]
   },
 
   "judging_rubric": {
     "rules_for_judging": [
-    "Judge by comparing the user's landmark sequence to the demonstrator's landmark sequence. The demonstrator is the reference for correctness.",
-    "You may infer temporal alignment implicitly using similarity of hand and face landmark motion (e.g., align corresponding phases of motion).",
-    "Do not rely on visual appearance cues not present in landmarks (e.g., skin texture, exact occlusion, finger tension).",
-    "When a judgment depends on palm orientation or fine finger pose, base it only on what can be inferred from landmark geometry; avoid claiming certainty beyond the coordinates.",
-    "Evaluate each criterion independently based on landmark geometry and motion patterns.",
-    "Use a 0–4 scale: 0 = does not match demonstrator, 4 = matches demonstrator closely."
-  ],
-  "criteria": [
-    {
-      "name": "Movement",
-      "what_to_judge": "Whether the user reproduces the demonstrator’s overall motion structure (presence of motion, phases, and motion type).",
-      "compare_using_landmarks": [
-        "wrist/palm-center trajectory over time",
-        "velocity over time (moving vs holding)",
-        "phase structure (start → stroke → hold → return if present in demonstrator)"
+      "Judge whether the user communicates the same sign category/intent as the demonstrator.",
+      "Be tolerant of normal variation in speed, range of motion, and exact positioning.",
+      "Implicitly align phases, but do not punish small phase shifts or early/late starts.",
+      "Treat landmark noise, jitter, and small finger differences as common and acceptable.",
+      "Only penalize handshape/orientation if it clearly changes the sign's meaning.",
+      "Weight Movement + Direction + Location most heavily.",
+      "Treat Handshape/Orientation, Timing, Flow, Jitter as low priority unless extreme.",
+      "Use the scoring anchors below and stay lenient."
+    ],
+
+    "score_anchors": {
+      "4": "Clearly the same sign. Minor differences are fine.",
+      "3": "Recognizably the same sign. Some differences, meaning preserved.",
+      "2": "Some resemblance, but a key element is missing or unclear.",
+      "1": "Mostly different sign. Only slight resemblance.",
+      "0": "Does not resemble the sign at all."
+    },
+
+    "grading_bias": {
+      "default_score_if_recognizable": 3,
+      "when_to_use_4": [
+        "Main motion matches well",
+        "Location is in the right region",
+        "No meaning-changing handshape difference"
       ],
-      "typical_errors": [
-        "missing a key motion phase",
-        "extra movement not present in demonstrator",
-        "different motion type (e.g., wave vs straight move)"
+      "when_to_drop_below_3": [
+        "Wrong motion type or direction that changes the sign",
+        "Hand is in a clearly different region for most of the sign",
+        "Handshape is clearly different in a meaning-changing way",
+        "Missing a major required phase entirely"
       ]
     },
-    {
-      "name": "Exaggeration",
-      "what_to_judge": "Whether the motion amplitude is similar to the demonstrator (not significantly smaller or larger).",
-      "compare_using_landmarks": [
-        "total displacement of wrist/palm-center",
-        "trajectory bounding box size",
-        "peak-to-peak range in main motion axis"
-      ],
-      "typical_errors": [
-        "motion much smaller than demonstrator",
-        "motion much larger than demonstrator"
-      ]
-    },
-    {
-      "name": "Path",
-      "what_to_judge": "Whether the shape of the motion trajectory matches the demonstrator.",
-      "compare_using_landmarks": [
-        "trajectory curvature pattern",
-        "deviation from demonstrator trajectory shape",
-        "shape similarity across aligned phases"
-      ],
-      "typical_errors": [
-        "straight vs arc mismatch",
-        "loop appears when demonstrator has none",
-        "trajectory deviates or wanders"
-      ]
-    },
-    {
-      "name": "Direction",
-      "what_to_judge": "Whether the dominant direction(s) of motion match the demonstrator (including reversals).",
-      "compare_using_landmarks": [
-        "dominant motion vector direction per phase",
-        "direction changes and reversals pattern",
-        "sign of motion along major axes"
-      ],
-      "typical_errors": [
-        "reversed direction",
-        "extra reversals or missing reversals",
-        "direction drift during the stroke"
-      ]
-    },
-    {
-      "name": "Flow",
-      "what_to_judge": "Whether smoothness and continuity match the demonstrator (unless the demonstrator shows crisp stops).",
-      "compare_using_landmarks": [
-        "velocity continuity",
-        "acceleration changes (spikes vs smooth)",
-        "pause/hold pattern compared to demonstrator"
-      ],
-      "typical_errors": [
-        "jerky motion vs smooth demonstrator",
-        "unintended pauses not in demonstrator",
-        "missing crisp stop/hold that demonstrator has"
-      ]
-    },
-    {
-      "name": "Hand Shape / Orientation",
-      "what_to_judge": "Whether the user matches the demonstrator’s hand configuration and orientation pattern at key moments.",
-      "compare_using_landmarks": [
-        "finger extension/closure pattern (per finger)",
-        "finger spread pattern (between fingertips)",
-        "thumb placement relative to index and palm",
-        "orientation proxy from landmark geometry (e.g., palm plane / relative landmark configuration)"
-      ],
-      "typical_errors": [
-        "wrong fingers extended",
-        "handshape drifts during key pose",
-        "orientation pattern differs at key pose"
-      ]
-    },
-    {
-      "name": "Positioning of Hand and FInger",
-      "what_to_judge": "Whether internal hand geometry matches the demonstrator (relative placement and implied contact/near-contact patterns).",
-      "compare_using_landmarks": [
-        "relative distances (fingertip↔palm, fingertip↔fingertip)",
-        "relative alignment of fingers",
-        "joint angle patterns implied by landmark geometry"
-      ],
-      "typical_errors": [
-        "thumb placement differs",
-        "fingers misaligned",
-        "near-contact differs from demonstrator"
-      ]
-    },
-    {
-      "name": "Location of Hand compared to face",
-      "what_to_judge": "Whether the hand is in the same face-relative region as the demonstrator throughout the sign.",
-      "compare_using_landmarks": [
-        "hand position relative to face landmarks (translation-invariant)",
-        "distance to face center / key face points across time",
-        "side-of-face consistency (left/right/center relative to face)"
-      ],
-      "typical_errors": [
-        "hand too high/low/side vs demonstrator",
-        "hand too close/far vs demonstrator",
-        "switches region during the sign"
-      ]
-    },
-    {
-      "name": "Finger Position",
-      "what_to_judge": "Whether fine-grained finger bends, separations, and thumb details match the demonstrator.",
-      "compare_using_landmarks": [
-        "per-finger bend pattern from joint geometry",
-        "fingertip spacing pattern",
-        "thumb-index geometry"
-      ],
-      "typical_errors": [
-        "fingers not bent enough vs demonstrator",
-        "finger spread differs",
-        "thumb tucked/extended differently"
-      ]
-    },
-    {
-      "name": "Timing & Segmentation",
-      "what_to_judge": "Whether the user matches the demonstrator’s timing structure and phase durations (after implicit alignment).",
-      "compare_using_landmarks": [
-        "relative duration of phases (stroke/hold/return) compared to demonstrator",
-        "timing of peaks (max extension / max displacement) compared to demonstrator",
-        "hold presence and approximate placement compared to demonstrator"
-      ],
-      "typical_errors": [
-        "rushed stroke vs demonstrator",
-        "holds too long/short vs demonstrator",
-        "peaks occur in different phase"
-      ]
-    },
-    {
-      "name": "Stability / Jitter",
-      "what_to_judge": "Whether unintended micro-movements or shakiness exceed the demonstrator’s stability, especially during holds.",
-      "compare_using_landmarks": [
-        "high-frequency jitter in fingertip and wrist positions",
-        "stability during low-motion segments",
-        "frame-to-frame noise compared to demonstrator"
-      ],
-      "typical_errors": [
-        "shaky holds",
-        "noisy jitter throughout",
-        "unstable handshape when demonstrator is stable"
-      ]
-    },
-    {
-      "name": "Two-Hand Coordination",
-      "what_to_judge": "If demonstrator uses two hands, whether the user matches relative timing, spacing, and role behavior.",
-      "compare_using_landmarks": [
-        "inter-hand distance profile over time",
-        "synchrony between hands across phases",
-        "non-dominant hand stability when demonstrator is stable"
-      ],
-      "typical_errors": [
-        "hands out of sync",
-        "wrong relative spacing",
-        "non-dominant hand moves when demonstrator stays fixed"
-      ]
-    }
-  ]
+
+    "criteria": [
+      {
+        "name": "Movement",
+        "what_to_judge": "Whether the user reproduces the demonstrator’s overall motion structure (presence of motion, phases, and motion type).",
+        "compare_using_landmarks": [
+          "wrist/palm-center trajectory over time",
+          "velocity over time (moving vs holding)",
+          "phase structure (start → stroke → hold → return if present)"
+        ],
+        "typical_errors": [
+          "missing a key motion phase",
+          "extra movement that changes the sign identity",
+          "different motion type (e.g., wave vs straight move)"
+        ],
+        "leniency_notes": [
+          "Allow small extra motion if the main motion matches.",
+          "Do not penalize minor shakiness as wrong movement."
+        ]
+      },
+      {
+        "name": "Location of Hand compared to face",
+        "what_to_judge": "Whether the hand stays in the correct general face-relative region during the sign.",
+        "compare_using_landmarks": [
+          "hand position relative to face landmarks (translation-invariant)",
+          "distance to face center / key face points across time",
+          "side-of-face consistency (left/right/center relative to face)"
+        ],
+        "typical_errors": [
+          "hand in a different region that changes meaning",
+          "hand consistently too far from the target region"
+        ],
+        "leniency_notes": [
+          "Allow moderate offset if it stays in the same general region.",
+          "Be forgiving if the camera framing is imperfect."
+        ]
+      },
+      {
+        "name": "Hand Shape / Orientation",
+        "what_to_judge": "Only judge if the handshape/orientation is clearly different in a meaning-changing way. Ignore small finger differences.",
+        "compare_using_landmarks": [
+          "finger extension/closure pattern (broad)",
+          "thumb placement relative to index and palm (broad)",
+          "orientation proxy from landmark geometry (only if clear)"
+        ],
+        "typical_errors": [
+          "wrong fingers extended in a way that changes the sign",
+          "completely different handshape"
+        ],
+        "leniency_notes": [
+          "Be forgiving of small finger bend differences.",
+          "Do not over-penalize unclear palm orientation."
+        ]
+      },
+      {
+        "name": "Direction",
+        "what_to_judge": "Whether the dominant direction(s) of motion match the demonstrator (including reversals).",
+        "compare_using_landmarks": [
+          "dominant motion vector direction per phase",
+          "direction changes and reversals pattern"
+        ],
+        "typical_errors": [
+          "reversed direction that changes the sign",
+          "missing a major reversal"
+        ],
+        "leniency_notes": [
+          "Allow slight directional drift if overall direction matches."
+        ]
+      },
+      {
+        "name": "Path",
+        "what_to_judge": "Whether the overall shape of the motion trajectory matches the demonstrator.",
+        "compare_using_landmarks": [
+          "trajectory curvature pattern",
+          "shape similarity across aligned phases"
+        ],
+        "typical_errors": [
+          "straight vs arc mismatch that changes the sign",
+          "big wandering away from the intended path"
+        ],
+        "leniency_notes": [
+          "Minor wobble is fine if the path type is correct."
+        ]
+      },
+      {
+        "name": "Timing & Segmentation",
+        "what_to_judge": "Whether the user matches the demonstrator’s phase structure (not exact speed).",
+        "compare_using_landmarks": [
+          "presence of phases (stroke/hold/return) compared to demonstrator",
+          "approximate ordering of phases"
+        ],
+        "typical_errors": [
+          "skipping a required phase",
+          "reordering phases in a way that changes meaning"
+        ],
+        "leniency_notes": [
+          "Do not penalize for faster/slower execution if the phase order matches."
+        ]
+      },
+      {
+        "name": "Flow",
+        "what_to_judge": "Whether the movement is reasonably smooth compared to the demonstrator.",
+        "compare_using_landmarks": [
+          "velocity continuity",
+          "pause/hold pattern compared to demonstrator"
+        ],
+        "typical_errors": [
+          "major unintended pauses that break the sign"
+        ],
+        "leniency_notes": [
+          "Ignore small jitter; only penalize severe jerkiness."
+        ]
+      },
+      {
+        "name": "Exaggeration",
+        "what_to_judge": "Whether motion amplitude is in a reasonable range compared to the demonstrator.",
+        "compare_using_landmarks": [
+          "total displacement of wrist/palm-center",
+          "trajectory bounding box size"
+        ],
+        "typical_errors": [
+          "extremely tiny motion that removes the sign",
+          "extremely large motion that changes the sign"
+        ],
+        "leniency_notes": [
+          "Most users will be smaller amplitude; be forgiving unless extreme."
+        ]
+      },
+      {
+        "name": "Stability / Jitter",
+        "what_to_judge": "Whether unintended shakiness is severe enough to obscure the sign.",
+        "compare_using_landmarks": [
+          "high-frequency jitter in fingertip and wrist positions",
+          "stability during low-motion segments"
+        ],
+        "typical_errors": [
+          "shaky holds that obscure the handshape"
+        ],
+        "leniency_notes": [
+          "Do not punish normal hand tremor or camera noise."
+        ]
+      },
+      {
+        "name": "Two-Hand Coordination",
+        "what_to_judge": "If demonstrator uses two hands, whether relative timing and spacing are approximately correct.",
+        "compare_using_landmarks": [
+          "inter-hand distance profile over time",
+          "synchrony between hands across phases"
+        ],
+        "typical_errors": [
+          "hands completely out of sync in a way that changes the sign"
+        ],
+        "leniency_notes": [
+          "Allow imperfect synchrony if roles are clearly correct."
+        ]
+      }
+    ]
   },
 
   "output_format": {
     "output_requirements": {
-        "description": "Return ONLY valid JSON. No markdown or extra text.",
-        "rules": [
-          "Return strictly valid JSON.",
-          "Do not include explanations outside the JSON.",
-          "overall_score_0_to_4 must be an integer from 0 to 4.",
-          "summary must be 2–3 sentences.",
-          "pros must contain 1–3 concise bullet points.",
-          "cons must contain 1–3 concise bullet points.",
-          "Each bullet point must be one short sentence.",
-          "Each bullet point must be under 12 words.",
-          "Do not use multiple clauses in bullet points."
-        ],
-        "format": {
-          "overall_score_0_to_4": "integer",
-          "summary": "string (2–3 sentences)",
-          "pros": {
-            "points": [
-              "string"
-            ]
-          },
-          "cons": {
-            "points": [
-              "string"
-            ]
-          }
-        }
+      "description": "Return ONLY valid JSON. No markdown or extra text.",
+      "rules": [
+        "Return strictly valid JSON.",
+        "Do not include explanations outside the JSON.",
+        "overall_score_0_to_4 must be an integer from 0 to 4.",
+        "summary must be 2–3 sentences.",
+        "pros must contain 1–3 concise bullet points.",
+        "cons must contain 1–3 concise bullet points.",
+        "Each bullet point must be one short sentence.",
+        "Each bullet point must be under 12 words.",
+        "Do not use multiple clauses in bullet points."
+      ],
+      "format": {
+        "overall_score_0_to_4": "integer",
+        "summary": "string (2–3 sentences)",
+        "pros": { "points": ["string"] },
+        "cons": { "points": ["string"] }
       }
     }
   }
+}

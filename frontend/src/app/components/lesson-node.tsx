@@ -44,7 +44,7 @@ const checkpointColors = {
 };
 
 export function LessonNode({ lesson, status, position, onClick, index }: LessonNodeProps) {
-  const isClickable = status === 'unlocked';
+  const isClickable = status === 'unlocked' || status === 'completed';
   const colors = lesson.type === 'checkpoint' || lesson.type === 'achievement'
     ? checkpointColors[status]
     : starColors[status];

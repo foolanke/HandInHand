@@ -241,7 +241,6 @@ export function LessonPath() {
   );
 
   const [totalXP, setTotalXP] = useState<number>(() => loadFromStorage("asl_totalXP", 0));
-
   const [dailyGoal, setDailyGoal] = useState<number>(() => loadFromStorage("asl_dailyGoal", 0));
   const [streak, setStreak] = useState<number>(() => loadFromStorage("asl_streak", 3));
 
@@ -278,10 +277,17 @@ export function LessonPath() {
   const isSkipAttempt = useRef(false);
   const isReviewSession = useRef(false);
   const unitTestCorrectCount = useRef(0);
+
+  // XP gate: if any SS1/SS3 fails (score 1-2), no lesson XP.
+  const anySlotFailed = useRef(false);
+
+  // Pass count across all slots in the current session (ss1/ss3: evaluated pass, ss2: correct)
+  const slotPassCount = useRef(0);
+
   const currentUnitWords = useRef<LessonWord[]>([]);
   const lessonStartTime = useRef<number>(0);
   const [lessonDuration, setLessonDuration] = useState<number>(0);
-  const [showSkipFailModal, setShowSkipFailModal] = useState(false);
+  const [failReason, setFailReason] = useState<'skip' | 'lesson' | 'unit-test' | null>(null);
   const [isReviewModal, setIsReviewModal] = useState(false);
 
   const { level, xpForNextLevel, levelProgress } = getLevelInfo(totalXP);
@@ -292,12 +298,10 @@ export function LessonPath() {
   const [pathLines, setPathLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
 
   useEffect(() => {
-    // Delay measurement so the browser has time to lay out nodes
     const timer = setTimeout(() => {
       const container = containerRef.current;
       if (!container) return;
 
-      // Get each node's center relative to the container using offset-based traversal
       function getOffsetRelativeTo(el: HTMLElement, ancestor: HTMLElement) {
         let x = 0, y = 0;
         let current: HTMLElement | null = el;
@@ -352,37 +356,100 @@ export function LessonPath() {
           .map((l, i) => ({ l, i }))
           .filter(({ l }) => l.unit === lesson.unit)
           .map(({ i }) => i);
+
         setCompletedLessons((prev) => {
           const newSet = new Set(prev);
           unitLessonIndices.forEach((i) => newSet.add(i));
           return newSet;
         });
+
+        // Skip attempt still awards checkpoint XP on pass
+        setTotalXP((prev) => prev + lesson.xp);
+        setDailyGoal((prev) => prev + lesson.xp);
+
+        setLessonDuration(Math.round((Date.now() - lessonStartTime.current) / 1000));
+        setShowConfetti(true);
+        setShowModal(true);
+      } else {
+        setFailReason('skip');
+      }
+
+      anySlotFailed.current = false;
+      slotPassCount.current = 0;
+      return;
+    }
+
+    const review = isReviewSession.current;
+    const allSlotsPassed = !anySlotFailed.current;
+
+    // ── Unit test pass/fail gate ──────────────────────────────────────────────
+    if (isUnitTest.current) {
+      const passed = slotPassCount.current >= 10;
+      setActiveView("path");
+      setLessonSlots([]);
+      setCurrentSlotIndex(0);
+      sessionResults.current = [];
+      isUnitTest.current = false;
+      isSkipAttempt.current = false;
+      isReviewSession.current = false;
+      unitTestCorrectCount.current = 0;
+      currentUnitWords.current = [];
+      anySlotFailed.current = false;
+      slotPassCount.current = 0;
+
+      if (passed) {
+        setCompletedLessons((prev) => { const s = new Set(prev); s.add(lessonIndex); return s; });
         setTotalXP((prev) => prev + lesson.xp);
         setDailyGoal((prev) => prev + lesson.xp);
         setLessonDuration(Math.round((Date.now() - lessonStartTime.current) / 1000));
         setShowConfetti(true);
         setShowModal(true);
       } else {
-        setShowSkipFailModal(true);
+        setFailReason('unit-test');
       }
       return;
     }
 
-    const review = isReviewSession.current;
+    // ── Regular lesson pass/fail gate (need ≥5/6 slots passed) ───────────────
+    const lessonPassed = slotPassCount.current >= 5;
 
+    if (!review && !lessonPassed) {
+      setActiveView("path");
+      setLessonSlots([]);
+      setCurrentSlotIndex(0);
+      sessionResults.current = [];
+      isUnitTest.current = false;
+      isSkipAttempt.current = false;
+      isReviewSession.current = false;
+      unitTestCorrectCount.current = 0;
+      currentUnitWords.current = [];
+      anySlotFailed.current = false;
+      slotPassCount.current = 0;
+      setFailReason('lesson');
+      return;
+    }
+
+    // Mark completion (normal + review)
     if (!review) {
       setCompletedLessons((prev) => {
         const newSet = new Set(prev);
         newSet.add(lessonIndex);
         return newSet;
       });
-      setTotalXP((prev) => prev + lesson.xp);
-      setDailyGoal((prev) => prev + lesson.xp);
+
+      // ✅ Binary XP rule: any SS1/SS3 fail => 0 XP. SS1/SS3 pass => full lesson.xp
+      if (allSlotsPassed) {
+        setTotalXP((prev) => prev + lesson.xp);
+        setDailyGoal((prev) => prev + lesson.xp);
+      }
     }
 
     setLessonDuration(Math.round((Date.now() - lessonStartTime.current) / 1000));
     setIsReviewModal(review);
-    setShowConfetti(!review);
+
+    // Confetti only when a NEW lesson is completed AND XP awarded
+    setShowConfetti(!review && allSlotsPassed);
+
     setShowModal(true);
 
     setActiveView("path");
@@ -395,17 +462,20 @@ export function LessonPath() {
     isReviewSession.current = false;
     unitTestCorrectCount.current = 0;
     currentUnitWords.current = [];
-  }, []);
+    anySlotFailed.current = false;
+    slotPassCount.current = 0;
+  }, [setTotalXP, setDailyGoal]);
 
   const handleLessonClick = useCallback(
     (lessonIndex: number) => {
       const lesson = lessons[lessonIndex];
       setCurrentLesson(lesson);
+
       lessonStartTime.current = Date.now();
       sessionResults.current = [];
+      anySlotFailed.current = false;
 
       if (lesson.type === "checkpoint") {
-        // Unit Test: gather all words from this unit's lessons
         const unitWords = (unitLessons[lesson.unit] ?? []).flatMap((id) => lessonWords[id] ?? []);
         if (unitWords.length > 0) {
           for (const w of unitWords) {
@@ -447,25 +517,31 @@ export function LessonPath() {
         completeLesson(lessonIndex);
       }
     },
-    [completeLesson]
+    [completeLesson, completedLessons]
   );
 
   const handleSkipToTest = useCallback(
     (unitNumber: number) => {
       const checkpoint = lessons.find((l) => l.unit === unitNumber && l.type === "checkpoint");
       if (!checkpoint) return;
+
       const unitWords = (unitLessons[unitNumber] ?? []).flatMap((id) => lessonWords[id] ?? []);
       if (unitWords.length === 0) return;
+
       for (const w of unitWords) {
         if (!masteryMap.current[w.word]) masteryMap.current[w.word] = defaultWordStats();
       }
+
       setCurrentLesson(checkpoint);
       lessonStartTime.current = Date.now();
       sessionResults.current = [];
+      anySlotFailed.current = false;
+
       isUnitTest.current = true;
       isSkipAttempt.current = true;
       unitTestCorrectCount.current = 0;
       currentUnitWords.current = unitWords;
+
       setLessonSlots(generateUnitTestSlots(unitWords, masteryMap.current));
       setCurrentSlotIndex(0);
       setActiveView("sublesson");
@@ -474,7 +550,7 @@ export function LessonPath() {
   );
 
   const handleSlotComplete = useCallback(
-    (wasCorrect?: boolean) => {
+    (wasCorrect?: boolean, ss1ss3Passed?: boolean) => {
       const slot = lessonSlots[currentSlotIndex];
       if (!slot) return;
 
@@ -482,11 +558,25 @@ export function LessonPath() {
         ? currentUnitWords.current
         : (lessonWords[currentLesson!.id] ?? []);
 
-      // update mastery + persist
+      // ✅ Gate XP based on SS1/SS3 score:
+      // passed=true only when score is 3 or 4.
+      if ((slot.type === "ss1" || slot.type === "ss3") && ss1ss3Passed === false) {
+        anySlotFailed.current = true;
+      }
+
+      // Track per-slot pass for lesson/unit-test gates
+      if (slot.type === "ss2") {
+        if (wasCorrect === true) slotPassCount.current += 1;
+      } else {
+        // ss1 / ss3: count as pass unless explicitly failed
+        if (ss1ss3Passed !== false) slotPassCount.current += 1;
+      }
+
+      // 1) Update mastery + persist
       masteryMap.current = updateMastery(masteryMap.current, slot, currentSlotIndex, wasCorrect);
       localStorage.setItem("asl_masteryMap", JSON.stringify(masteryMap.current));
 
-      // track ss2 results
+      // 2) Track SS2 results (for unit test / overrides)
       if (slot.type === "ss2") {
         sessionResults.current.push({
           word: slot.word,
@@ -495,32 +585,10 @@ export function LessonPath() {
         });
       }
 
-      // runtime overrides
+      // 3) Runtime overrides
       let updatedSlots = lessonSlots;
 
-      if (isUnitTest.current) {
-        if (slot.type === "ss2") {
-          if (wasCorrect) {
-            unitTestCorrectCount.current += 1;
-            // Reached 12 correct — complete
-            if (unitTestCorrectCount.current >= 12) {
-              completeLesson(lessons.findIndex((l) => l.id === currentLesson!.id));
-              return;
-            }
-          } else {
-            // Wrong — append a new SS2 for this word at the end
-            const wordData = words.find((w) => w.word === slot.word);
-            if (wordData) {
-              updatedSlots = [
-                ...lessonSlots,
-                { type: "ss2" as const, word: wordData.word, videoPath: wordData.videoPath, correctAnswer: wordData.correctAnswer, wrongAnswers: wordData.wrongAnswers },
-              ];
-              setLessonSlots(updatedSlots);
-            }
-          }
-        }
-      } else {
-        // IMPORTANT: overrideSlot3 is meant to run after the first SS2 slot (index 2)
+      if (!isUnitTest.current) {
         if (currentSlotIndex === 2) {
           updatedSlots = overrideSlot3(lessonSlots, words, slot.word, wasCorrect ?? true);
           setLessonSlots(updatedSlots);
@@ -530,7 +598,7 @@ export function LessonPath() {
         }
       }
 
-      // advance
+      // 4) Advance
       const nextIndex = currentSlotIndex + 1;
       if (nextIndex < updatedSlots.length) {
         setCurrentSlotIndex(nextIndex);
@@ -548,10 +616,11 @@ export function LessonPath() {
     sessionResults.current = [];
     isUnitTest.current = false;
     currentUnitWords.current = [];
+    anySlotFailed.current = false;
+    slotPassCount.current = 0;
     setCurrentLesson(null);
   }, []);
 
-  // NOTE: completedLessons stores lesson *index*, and you pass `index` into getLessonStatus.
   const getLessonStatus = (lessonIndex: number): "locked" | "unlocked" | "completed" => {
     if (completedLessons.has(lessonIndex)) return "completed";
     if (lessonIndex === 0) return "unlocked";
@@ -559,14 +628,13 @@ export function LessonPath() {
     return previousCompleted ? "unlocked" : "locked";
   };
 
-
   // Render active sublesson slot
   if (activeView === "sublesson" && lessonSlots.length > 0) {
     const slot = lessonSlots[currentSlotIndex];
     const slotKey = `${currentSlotIndex}-${slot.type}-${slot.word}`;
 
-    const unitNames = ['Greetings & Basics', 'Family', 'Daily Life', 'Out & About'];
-    const unitName = unitNames[(currentLesson?.unit ?? 1) - 1] ?? 'ASL';
+    const unitNames = ["Greetings & Basics", "Family", "Daily Life", "Out & About"];
+    const unitName = unitNames[(currentLesson?.unit ?? 1) - 1] ?? "ASL";
 
     if (slot.type === "ss1") {
       return (
@@ -575,7 +643,7 @@ export function LessonPath() {
           wordPhrase={slot.word}
           videoPath={slot.videoPath}
           unitName={unitName}
-          onComplete={() => handleSlotComplete()}
+          onComplete={(passed) => handleSlotComplete(undefined, passed)}
           onBack={handleBack}
         />
       );
@@ -600,7 +668,7 @@ export function LessonPath() {
           key={slotKey}
           wordPhrase={slot.word}
           unitName={unitName}
-          onComplete={() => handleSlotComplete()}
+          onComplete={(passed) => handleSlotComplete(undefined, passed)}
           onBack={handleBack}
         />
       );
@@ -630,7 +698,7 @@ export function LessonPath() {
         {currentLesson && (
           <LessonCompleteModal
             isOpen={showModal}
-            xpEarned={isReviewModal ? 0 : currentLesson.xp}
+            xpEarned={isReviewModal ? 0 : (!anySlotFailed.current ? currentLesson.xp : 0)}
             lessonTitle={currentLesson.title}
             duration={lessonDuration}
             isReview={isReviewModal}
@@ -642,7 +710,7 @@ export function LessonPath() {
           />
         )}
 
-        {showSkipFailModal && (
+        {failReason !== null && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4">
             <motion.div
               className="bg-slate-900 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center"
@@ -654,9 +722,18 @@ export function LessonPath() {
                 <Zap className="w-12 h-12 text-white" />
               </div>
               <h2 className="text-2xl font-bold text-white mb-2">Not quite yet!</h2>
-              <p className="text-slate-400 mb-6">Work through the lessons to build up your skills, then try the unit test again.</p>
+              <p className="text-slate-400 mb-6">
+                {failReason === 'lesson'
+                  ? 'You need to pass at least 5 out of 6 sublessons to complete this lesson. Give it another try!'
+                  : failReason === 'unit-test'
+                  ? 'You need to pass at least 10 out of 12 questions to pass the unit test. Keep practicing and try again!'
+                  : 'Work through the lessons to build up your skills, then try the unit test again.'}
+              </p>
               <button
-                onClick={() => { setShowSkipFailModal(false); setCurrentLesson(null); }}
+                onClick={() => {
+                  setFailReason(null);
+                  setCurrentLesson(null);
+                }}
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white py-3 text-lg font-bold rounded-xl shadow-lg transition"
               >
                 Keep Practicing
@@ -675,7 +752,9 @@ export function LessonPath() {
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
             <Sparkles className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Douling</h1>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Douling
+          </h1>
         </motion.div>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
@@ -684,10 +763,7 @@ export function LessonPath() {
           <div className="relative max-w-2xl mx-auto py-16 px-8" ref={containerRef}>
             {/* Connecting paths between stars */}
             {pathLines.length > 0 && (
-              <svg
-                className="absolute inset-0 w-full h-full pointer-events-none"
-                style={{ zIndex: 1 }}
-              >
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
                 <defs>
                   <linearGradient id="pathLit" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop offset="0%" stopColor="#a78bfa" />
@@ -705,8 +781,9 @@ export function LessonPath() {
                     </feMerge>
                   </filter>
                 </defs>
+
                 {pathLines.map((line, index) => {
-                  const isLit = getLessonStatus(index) === 'completed';
+                  const isLit = getLessonStatus(index) === "completed";
                   const midY = (line.y1 + line.y2) / 2;
                   const pathD = `M ${line.x1} ${line.y1} C ${line.x1} ${midY}, ${line.x2} ${midY}, ${line.x2} ${line.y2}`;
 
@@ -750,7 +827,7 @@ export function LessonPath() {
                             <Star className="w-6 h-6 text-yellow-400 fill-yellow-400" />
                           </div>
                           <p className="text-sm text-blue-200 font-medium">
-                            {(['Greetings & Basics', 'Family', 'Daily Life', 'Out & About'] as const)[unitNumber - 1]}
+                            {(["Greetings & Basics", "Family", "Daily Life", "Out & About"] as const)[unitNumber - 1]}
                           </p>
                           <button
                             onClick={() => handleSkipToTest(unitNumber)}
@@ -776,6 +853,7 @@ export function LessonPath() {
                 );
               })}
             </div>
+
           </div>
         </div>
       </div>

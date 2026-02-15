@@ -3,6 +3,7 @@ import mediapipe as mp
 import json
 import tempfile
 import os
+import subprocess
 
 mp_face_mesh = mp.solutions.face_mesh
 mp_hands = mp.solutions.hands
@@ -20,28 +21,61 @@ FACE_KEY_POINTS = {
 }
 
 
-def convert_video_to_json(word: str, video: bytes) -> str:
+def _transcode_to_mp4(video_bytes: bytes, input_suffix: str) -> bytes:
+    """Use ffmpeg to convert any video format to mp4 so OpenCV can decode it."""
+    inp_path = None
+    out_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=input_suffix) as inp:
+            inp.write(video_bytes)
+            inp_path = inp.name
+        out_path = inp_path.replace(input_suffix, '_converted.mp4')
+        result = subprocess.run(
+            [
+                'ffmpeg', '-y', '-i', inp_path,
+                '-c:v', 'libx264', '-preset', 'ultrafast',
+                '-an',          # drop audio — not needed for landmark extraction
+                out_path
+            ],
+            capture_output=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise ValueError(f"ffmpeg transcoding failed: {result.stderr.decode(errors='replace')}")
+        with open(out_path, 'rb') as f:
+            return f.read()
+    finally:
+        for p in (inp_path, out_path):
+            if p and os.path.exists(p):
+                os.remove(p)
+
+
+def convert_video_to_json(word: str, video: bytes, suffix: str = '.mp4') -> str:
     """
     Convert video to JSON landmark string.
 
     Args:
         word: The ASL word being signed
         video: Video file content as bytes
+        suffix: File extension to use for the temp file (e.g. '.mp4' or '.webm')
 
     Returns:
         JSON string containing landmark data
     """
-    # Write video bytes to a temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
+    # Transcode non-mp4 formats (e.g. webm from browser) to mp4 so OpenCV can decode them
+    if suffix != '.mp4':
+        video = _transcode_to_mp4(video, suffix)
+        suffix = '.mp4'
+
+    # Write video bytes to a temporary file with the correct extension
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
         temp_file.write(video)
         temp_path = temp_file.name
 
     try:
-        # Extract landmarks using the same logic as landmark_extractor
         landmarks_json = _extract_landmarks(temp_path, word, face_sample_rate=10)
         return landmarks_json
     finally:
-        # Clean up temporary file
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
