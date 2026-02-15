@@ -2,5 +2,5 @@
 from pydantic import BaseModel
 
 class Action(BaseModel):
-    word: str,
+    word: str
     # how to add video
