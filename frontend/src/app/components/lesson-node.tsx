@@ -42,7 +42,7 @@ const typeColors = {
 export function LessonNode({ lesson, status, position, onClick, index }: LessonNodeProps) {
   const Icon = iconMap[lesson.type];
 
-  const isClickable = status === 'unlocked';
+  const isClickable = status === 'unlocked' || status === 'completed';
 
   const getColor = () => {
     return typeColors[lesson.type][status];
@@ -85,7 +85,7 @@ export function LessonNode({ lesson, status, position, onClick, index }: LessonN
           ${getBorderGlow()}
           flex items-center justify-center
           border-[6px] border-slate-700/50
-          ${isClickable ? 'cursor-pointer' : 'cursor-not-allowed'}
+          ${isClickable ? 'cursor-pointer' : 'cursor-default opacity-60'}
           transition-all duration-200
         `}
         whileHover={isClickable ? { scale: 1.15, rotate: 5 } : {}}

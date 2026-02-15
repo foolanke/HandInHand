@@ -7,10 +7,11 @@ interface LessonCompleteModalProps {
   xpEarned: number;
   lessonTitle: string;
   duration: number;
+  isReview?: boolean;
   onContinue: () => void;
 }
 
-export function LessonCompleteModal({ isOpen, xpEarned, lessonTitle, duration, onContinue }: LessonCompleteModalProps) {
+export function LessonCompleteModal({ isOpen, xpEarned, lessonTitle, duration, isReview = false, onContinue }: LessonCompleteModalProps) {
   const mins = Math.floor(duration / 60);
   const secs = duration % 60;
   const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
@@ -41,17 +42,19 @@ export function LessonCompleteModal({ isOpen, xpEarned, lessonTitle, duration, o
           transition={{ delay: 0.3 }}
           className="text-center"
         >
-          <h2 className="text-3xl font-bold text-white mb-2">Lesson Complete!</h2>
+          <h2 className="text-3xl font-bold text-white mb-2">{isReview ? 'Review Complete!' : 'Lesson Complete!'}</h2>
           <p className="text-slate-400 mb-6">{lessonTitle}</p>
 
           <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-purple-500/20 rounded-xl p-6 mb-6">
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <Star className="w-6 h-6 text-yellow-400" fill="currentColor" />
-              <span className="text-4xl font-bold text-yellow-300">
-                +{xpEarned} XP
-              </span>
-              <Star className="w-6 h-6 text-yellow-400" fill="currentColor" />
-            </div>
+            {isReview ? (
+              <p className="text-slate-300 text-lg font-medium">Great practice! No XP for reviews.</p>
+            ) : (
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <Star className="w-6 h-6 text-yellow-400" fill="currentColor" />
+                <span className="text-4xl font-bold text-yellow-300">+{xpEarned} XP</span>
+                <Star className="w-6 h-6 text-yellow-400" fill="currentColor" />
+              </div>
+            )}
             <div className="flex items-center justify-center gap-2 mt-3 bg-slate-800/60 rounded-lg px-4 py-2.5">
               <Clock className="w-5 h-5 text-blue-400" />
               <span className="text-xl font-semibold text-slate-200">{timeStr}</span>

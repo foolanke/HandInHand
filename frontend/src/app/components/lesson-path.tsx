@@ -17,7 +17,6 @@ import {
   overrideSlot3,
   overrideSlot5,
   generateUnitTestSlots,
-  overrideUnitTestAfterMiss,
   updateMastery,
 } from "../lib/lesson-algorithm";
 import { Sparkles, Star, Zap } from "lucide-react";
@@ -43,9 +42,9 @@ const lessons: Lesson[] = [
   { id: 7, title: "Lesson 6", description: "Family: Parents", type: "lesson", xp: 20, unit: 2 },
   { id: 8, title: "Unit 2 Test", description: "Test your skills", type: "checkpoint", xp: 50, unit: 2 },
 
-  { id: 10, title: "Lesson 8", description: "Family Members", type: "lesson", xp: 20, unit: 3 },
-  { id: 11, title: "Lesson 9", description: "Body Parts", type: "lesson", xp: 20, unit: 3 },
-  { id: 12, title: "Lesson 10", description: "Emotions", type: "lesson", xp: 25, unit: 3 },
+  { id: 10, title: "Lesson 7", description: "Siblings", type: "lesson", xp: 20, unit: 3 },
+  { id: 11, title: "Lesson 8", description: "School Roles", type: "lesson", xp: 20, unit: 3 },
+  { id: 12, title: "Lesson 9", description: "Social Bonds", type: "lesson", xp: 25, unit: 3 },
   { id: 13, title: "Unit 3 Test", description: "Checkpoint", type: "checkpoint", xp: 30, unit: 3 },
 
   { id: 14, title: "Lesson 11", description: "Places & Locations", type: "lesson", xp: 25, unit: 4 },
@@ -144,6 +143,50 @@ const lessonWords: Record<number, LessonWord[]> = {
       wrongAnswers: ["Father", "Woman", "Girl", "Boy"],
     },
   ],
+
+  // Unit 3 lessons
+  10: [
+    {
+      word: "Brother",
+      videoPath: `${import.meta.env.BASE_URL}videos/lesson3-brother.mp4`,
+      correctAnswer: "Brother",
+      wrongAnswers: ["Sister", "Father", "Friend", "Student"],
+    },
+    {
+      word: "Sister",
+      videoPath: `${import.meta.env.BASE_URL}videos/lesson3-sister.mp4`,
+      correctAnswer: "Sister",
+      wrongAnswers: ["Brother", "Mother", "Friend", "Teacher"],
+    },
+  ],
+  11: [
+    {
+      word: "Student",
+      videoPath: `${import.meta.env.BASE_URL}videos/lesson3-student.mp4`,
+      correctAnswer: "Student",
+      wrongAnswers: ["Teacher", "Brother", "Friend", "Father"],
+    },
+    {
+      word: "Teacher",
+      videoPath: `${import.meta.env.BASE_URL}videos/lesson3-teacher.mp4`,
+      correctAnswer: "Teacher",
+      wrongAnswers: ["Student", "Sister", "Mother", "Friend"],
+    },
+  ],
+  12: [
+    {
+      word: "Family",
+      videoPath: `${import.meta.env.BASE_URL}videos/lesson3-family.mp4`,
+      correctAnswer: "Family",
+      wrongAnswers: ["Friend", "Brother", "Teacher", "Mother"],
+    },
+    {
+      word: "Friend",
+      videoPath: `${import.meta.env.BASE_URL}videos/lesson3-friend.mp4`,
+      correctAnswer: "Friend",
+      wrongAnswers: ["Family", "Sister", "Student", "Father"],
+    },
+  ],
 };
 
 // Lesson IDs belonging to each unit (used to build the unit test word pool)
@@ -233,10 +276,13 @@ export function LessonPath() {
 
   const isUnitTest = useRef(false);
   const isSkipAttempt = useRef(false);
+  const isReviewSession = useRef(false);
+  const unitTestCorrectCount = useRef(0);
   const currentUnitWords = useRef<LessonWord[]>([]);
   const lessonStartTime = useRef<number>(0);
   const [lessonDuration, setLessonDuration] = useState<number>(0);
   const [showSkipFailModal, setShowSkipFailModal] = useState(false);
+  const [isReviewModal, setIsReviewModal] = useState(false);
 
   const { level, xpForNextLevel, levelProgress } = getLevelInfo(totalXP);
 
@@ -280,17 +326,21 @@ export function LessonPath() {
       return;
     }
 
-    setCompletedLessons((prev) => {
-      const newSet = new Set(prev);
-      newSet.add(lessonIndex);
-      return newSet;
-    });
+    const review = isReviewSession.current;
 
-    setTotalXP((prev) => prev + lesson.xp);
-    setDailyGoal((prev) => prev + lesson.xp);
+    if (!review) {
+      setCompletedLessons((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(lessonIndex);
+        return newSet;
+      });
+      setTotalXP((prev) => prev + lesson.xp);
+      setDailyGoal((prev) => prev + lesson.xp);
+    }
 
     setLessonDuration(Math.round((Date.now() - lessonStartTime.current) / 1000));
-    setShowConfetti(true);
+    setIsReviewModal(review);
+    setShowConfetti(!review);
     setShowModal(true);
 
     setActiveView("path");
@@ -299,6 +349,9 @@ export function LessonPath() {
 
     sessionResults.current = [];
     isUnitTest.current = false;
+    isSkipAttempt.current = false;
+    isReviewSession.current = false;
+    unitTestCorrectCount.current = 0;
     currentUnitWords.current = [];
   }, []);
 
@@ -318,6 +371,7 @@ export function LessonPath() {
           }
 
           isUnitTest.current = true;
+          unitTestCorrectCount.current = 0;
           currentUnitWords.current = unitWords;
 
           setLessonSlots(generateUnitTestSlots(unitWords, masteryMap.current));
@@ -341,6 +395,7 @@ export function LessonPath() {
         }
 
         isUnitTest.current = false;
+        isReviewSession.current = completedLessons.has(lessonIndex);
         currentUnitWords.current = [];
 
         setLessonSlots(generateSlots(words, masteryMap.current));
@@ -367,6 +422,7 @@ export function LessonPath() {
       sessionResults.current = [];
       isUnitTest.current = true;
       isSkipAttempt.current = true;
+      unitTestCorrectCount.current = 0;
       currentUnitWords.current = unitWords;
       setLessonSlots(generateUnitTestSlots(unitWords, masteryMap.current));
       setCurrentSlotIndex(0);
@@ -401,9 +457,25 @@ export function LessonPath() {
       let updatedSlots = lessonSlots;
 
       if (isUnitTest.current) {
-        if (slot.type === "ss2" && wasCorrect === false) {
-          updatedSlots = overrideUnitTestAfterMiss(lessonSlots, currentSlotIndex, slot.word, words);
-          setLessonSlots(updatedSlots);
+        if (slot.type === "ss2") {
+          if (wasCorrect) {
+            unitTestCorrectCount.current += 1;
+            // Reached 12 correct — complete
+            if (unitTestCorrectCount.current >= 12) {
+              completeLesson(lessons.findIndex((l) => l.id === currentLesson!.id));
+              return;
+            }
+          } else {
+            // Wrong — append a new SS2 for this word at the end
+            const wordData = words.find((w) => w.word === slot.word);
+            if (wordData) {
+              updatedSlots = [
+                ...lessonSlots,
+                { type: "ss2" as const, word: wordData.word, videoPath: wordData.videoPath, correctAnswer: wordData.correctAnswer, wrongAnswers: wordData.wrongAnswers },
+              ];
+              setLessonSlots(updatedSlots);
+            }
+          }
         }
       } else {
         // IMPORTANT: overrideSlot3 is meant to run after the first SS2 slot (index 2)
@@ -444,6 +516,7 @@ export function LessonPath() {
     const previousCompleted = completedLessons.has(lessonIndex - 1);
     return previousCompleted ? "unlocked" : "locked";
   };
+
 
   // Render active sublesson slot
   if (activeView === "sublesson" && lessonSlots.length > 0) {
@@ -515,12 +588,14 @@ export function LessonPath() {
         {currentLesson && (
           <LessonCompleteModal
             isOpen={showModal}
-            xpEarned={currentLesson.xp}
+            xpEarned={isReviewModal ? 0 : currentLesson.xp}
             lessonTitle={currentLesson.title}
             duration={lessonDuration}
+            isReview={isReviewModal}
             onContinue={() => {
               setShowModal(false);
               setCurrentLesson(null);
+              setIsReviewModal(false);
             }}
           />
         )}
